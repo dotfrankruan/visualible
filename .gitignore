@@ -1,0 +1,4 @@
+/visualible
+*.db
+*.db-journal
+/dist/

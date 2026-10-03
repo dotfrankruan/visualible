@@ -1,0 +1,66 @@
+{
+  "community.docker.docker_container": {
+    "doc": {
+      "collection": "community.docker",
+      "description": "Manage the life cycle of docker containers.",
+      "module": "docker_container",
+      "options": {
+        "name": {
+          "description": "Assign a name to a new container.",
+          "required": true,
+          "type": "str"
+        },
+        "image": {
+          "description": "Repository path and tag used to create the container.",
+          "type": "str"
+        },
+        "state": {
+          "choices": ["absent", "present", "started", "stopped"],
+          "default": "started",
+          "description": ["Represents the state of the container."],
+          "type": "str"
+        },
+        "ports": {
+          "description": "List of published ports.",
+          "elements": "str",
+          "type": "list"
+        },
+        "networks": {
+          "description": "List of networks the container belongs to.",
+          "elements": "dict",
+          "type": "list",
+          "suboptions": {
+            "name": {
+              "description": "Name of the network.",
+              "required": true,
+              "type": "str"
+            },
+            "ipv4_address": {
+              "description": "Container IPv4 address in that network.",
+              "type": "str"
+            },
+            "links": {
+              "description": "A list of containers to link to.",
+              "elements": "str",
+              "type": "list"
+            }
+          }
+        },
+        "log_config": {
+          "description": "Logging configuration for the container.",
+          "type": "dict",
+          "options": {
+            "driver": {
+              "description": "Logging driver.",
+              "type": "str"
+            }
+          }
+        }
+      },
+      "short_description": "manage docker containers",
+      "version_added": "1.0.0"
+    },
+    "examples": "",
+    "return": {}
+  }
+}
