@@ -22,6 +22,7 @@ export const server = {
   moduleSchemas: new Map(),  // fqcn -> normalized schema
   ansibleError: null,        // structured API error when discovery unavailable
   projects: [],              // project metadata list
+  credentials: [],           // credential metadata (never secrets)
 };
 
 // ---------- Editor state (working IR + history) ----------

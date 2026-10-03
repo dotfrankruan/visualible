@@ -34,4 +34,10 @@ export const api = {
     }),
   deleteProject: (id) =>
     request(`/api/projects/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  credentials: () => request('/api/credentials'),
+  createCredential: (name, kind, secret) =>
+    request('/api/credentials', { method: 'POST', body: JSON.stringify({ name, kind, secret }) }),
+  deleteCredential: (id) =>
+    request(`/api/credentials/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };

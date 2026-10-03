@@ -45,7 +45,7 @@ func main() {
 	}
 
 	dbPath := filepath.Join(*dataDir, "visualible.db")
-	st, err := store.Open(dbPath)
+	st, err := store.Open(dbPath, store.SecretKeyPath(*dataDir))
 	if err != nil {
 		logger.Fatalf("open database: %v", err)
 	}

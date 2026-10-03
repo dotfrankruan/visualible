@@ -73,6 +73,10 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("PUT /api/projects/{id}", s.handleProjectPut)
 	s.mux.HandleFunc("DELETE /api/projects/{id}", s.handleProjectDelete)
 
+	s.mux.HandleFunc("GET /api/credentials", s.handleCredentialList)
+	s.mux.HandleFunc("POST /api/credentials", s.handleCredentialCreate)
+	s.mux.HandleFunc("DELETE /api/credentials/{id}", s.handleCredentialDelete)
+
 	// Embedded frontend; anything not under /api falls through to static.
 	if static, err := webfs.Static(); err == nil {
 		s.mux.Handle("GET /", http.FileServer(http.FS(static)))

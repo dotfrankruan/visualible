@@ -285,6 +285,12 @@ function suboptionsControl(opt, value, set) {
   return sub;
 }
 
+// kvEditor exposes the free-form dict editor for non-module uses
+// (inventory host/group variables).
+export function kvEditor(value, set) {
+  return dictControl(value, set);
+}
+
 function dictControl(value, set) {
   const obj = typeof value === 'object' && value !== null && !Array.isArray(value) ? { ...value } : {};
   const wrap = el('div', { class: 'dict-editor' });

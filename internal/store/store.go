@@ -8,6 +8,7 @@ package store
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -21,12 +22,14 @@ import (
 
 // Store wraps the application database.
 type Store struct {
-	db *sql.DB
+	db  *sql.DB
+	box *secretBox
 }
 
 // Open opens (creating if necessary) the database at path and migrates
-// the schema. Use ":memory:" for tests.
-func Open(path string) (*Store, error) {
+// the schema. keyPath locates the secret-encryption key file; pass "" to
+// use an ephemeral in-memory key (tests). Use ":memory:" for tests.
+func Open(path, keyPath string) (*Store, error) {
 	// foreign_keys on; busy_timeout so a crashed peer cannot wedge us.
 	dsn := fmt.Sprintf("%s?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)", path)
 	db, err := sql.Open("sqlite", dsn)
@@ -40,7 +43,28 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
-	return &Store{db: db}, nil
+	box, err := openBox(keyPath)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+	return &Store{db: db, box: box}, nil
+}
+
+func openBox(keyPath string) (*secretBox, error) {
+	if keyPath == "" {
+		// Ephemeral key: secrets are unreadable after Close. Tests only.
+		key := make([]byte, 32)
+		if _, err := rand.Read(key); err != nil {
+			return nil, err
+		}
+		aead, err := newGCM(key)
+		if err != nil {
+			return nil, err
+		}
+		return &secretBox{aead: aead}, nil
+	}
+	return openSecretBox(keyPath)
 }
 
 // Close closes the database.
@@ -56,7 +80,7 @@ CREATE TABLE IF NOT EXISTS projects (
     updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_projects_name ON projects(name);
-`
+` + credentialsSchema
 	if _, err := db.Exec(schema); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}

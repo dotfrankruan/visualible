@@ -75,7 +75,7 @@
     <nav id="tabs">
       <button class="tab active" data-tab="visual">Visual</button>
       <button class="tab" data-tab="yaml">YAML</button>
-      <button class="tab" data-tab="inventory" disabled title="Later phase">Inventory</button>
+      <button class="tab" data-tab="inventory">Inventory</button>
       <button class="tab" data-tab="deployments" disabled title="Later phase">Deployments</button>
       <button class="tab" data-tab="logs" disabled title="Later phase">Logs</button>
     </nav>
@@ -94,6 +94,37 @@
         <div id="yaml-diagnostics"></div>
         <pre id="yaml-view" class="mono yaml"></pre>
         <textarea id="yaml-editor" class="mono hidden" spellcheck="false"></textarea>
+      </div>
+      <div id="tab-inventory" class="tab-panel">
+        <div id="inventory-layout">
+          <section>
+            <div class="props-heading">Inventory</div>
+            <div class="inv-toolbar">
+              <button id="inv-add-group" class="mini-btn">+ group</button>
+              <button id="inv-add-ungrouped" class="mini-btn">+ ungrouped host</button>
+            </div>
+            <div id="inv-groups" class="scroll"></div>
+          </section>
+          <section>
+            <div class="props-heading">Credentials</div>
+            <div class="hint-line" style="margin-bottom:6px">
+              Secrets are write-only, encrypted at rest, and never inlined into inventory or playbooks.
+            </div>
+            <div id="cred-list" class="scroll"></div>
+            <form id="cred-add-form">
+              <input id="cred-name" type="text" placeholder="Name" required>
+              <select id="cred-kind">
+                <option value="ssh_key">ssh_key</option>
+                <option value="ssh_password">ssh_password</option>
+                <option value="become_password">become_password</option>
+                <option value="api_key">api_key</option>
+                <option value="s3">s3</option>
+              </select>
+              <textarea id="cred-secret" placeholder="Secret (stored encrypted, never shown again)" required></textarea>
+              <button class="primary" type="submit">Store credential</button>
+            </form>
+          </section>
+        </div>
       </div>
     </div>
   </footer>

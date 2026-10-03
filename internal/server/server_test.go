@@ -31,7 +31,7 @@ func fixtureDiscovery(t *testing.T) *ansible.Discovery {
 
 func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
-	st, err := store.Open(":memory:")
+	st, err := store.Open(":memory:", "")
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}

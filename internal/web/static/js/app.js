@@ -6,6 +6,7 @@ import { api } from './api.js';
 import * as store from './store.js';
 import { el, buildOptionsForm } from './form.js';
 import { renderYaml } from './yaml.js';
+import { wireInventoryTab, renderInventory } from './inventory.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -16,6 +17,7 @@ async function boot() {
   wireCanvas();
   wireTabs();
   wireProjectModal();
+  wireInventoryTab();
 
   store.on('editor', () => { renderCanvas(); renderProps(); renderProjectBar(); });
   store.on('history', renderHistoryButtons);
@@ -655,6 +657,7 @@ function wireTabs() {
       $(`#tab-${tab}`).classList.add('active');
       store.ui.tab = tab;
       if (tab === 'yaml' && store.ui.yamlDirty) renderYamlView();
+      if (tab === 'inventory') renderInventory();
     });
   }
   $('#btn-render-yaml').addEventListener('click', renderYamlView);

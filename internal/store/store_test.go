@@ -11,7 +11,7 @@ import (
 
 func openTest(t *testing.T) *Store {
 	t.Helper()
-	s, err := Open(":memory:")
+	s, err := Open(":memory:", "")
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
