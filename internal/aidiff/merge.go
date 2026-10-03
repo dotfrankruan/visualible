@@ -32,15 +32,15 @@ func Merge(base, proposed *ir.Playbook, d *Diff, accepted map[string]bool) (*ir.
 		return nil, fmt.Errorf("base and proposed playbooks are required")
 	}
 	out := &ir.Playbook{ID: base.ID, Name: base.Name}
-	if len(base.Plays) == 0 {
-		// No base play: the proposed play is one big addition; accepting
-		// everything-or-nothing is the only coherent merge.
-		if len(proposed.Plays) > 0 {
-			out.Plays = append(out.Plays, cloneTasksOf(proposed.Plays[0]))
-		}
-		return validateMerged(out)
+	if len(proposed.Plays) == 0 {
+		return nil, fmt.Errorf("proposed playbook has no plays")
 	}
-	bp := base.Plays[0]
+	// Empty base (new/empty project): diff against an empty play so
+	// additions merge through the same selective path as everything else.
+	bp := &ir.Play{ID: "play", Name: "New play", Hosts: "all"}
+	if len(base.Plays) > 0 {
+		bp = base.Plays[0]
+	}
 	pp := proposed.Plays[0]
 
 	mergedPlay := &ir.Play{
@@ -81,7 +81,9 @@ func Merge(base, proposed *ir.Playbook, d *Diff, accepted map[string]bool) (*ir.
 	}
 	out.Plays = append(out.Plays, mergedPlay)
 	// Additional plays (outside v1 editor scope) pass through unchanged.
-	out.Plays = append(out.Plays, base.Plays[1:]...)
+	if len(base.Plays) > 1 {
+		out.Plays = append(out.Plays, base.Plays[1:]...)
+	}
 	return validateMerged(out)
 }
 
@@ -159,11 +161,6 @@ func findChange(changes map[string]*Change, section, taskID string) *Change {
 		}
 	}
 	return nil
-}
-
-func cloneTasksOf(p *ir.Play) *ir.Play {
-	cp := *p
-	return &cp
 }
 
 func validateMerged(pb *ir.Playbook) (*ir.Playbook, error) {

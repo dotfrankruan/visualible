@@ -77,14 +77,18 @@ var taskSections = []struct {
 
 // Playbooks computes the semantic diff between a base and a proposed
 // playbook. v1 scope: the first play of each (the editor's working
-// scope); plays beyond the first are compared by count only.
+// scope); plays beyond the first pass through merge unchanged.
 func Playbooks(base, proposed *ir.Playbook) *Diff {
 	d := &Diff{}
-	if base == nil || proposed == nil || len(base.Plays) == 0 || len(proposed.Plays) == 0 {
-		// Degenerate case: everything is an addition or a removal.
+	if base == nil || proposed == nil || len(proposed.Plays) == 0 {
 		return d
 	}
-	bp, pp := base.Plays[0], proposed.Plays[0]
+	// Empty base (new/empty project): everything is an addition.
+	bp := &ir.Play{}
+	if len(base.Plays) > 0 {
+		bp = base.Plays[0]
+	}
+	pp := proposed.Plays[0]
 	d.PlayChanges = diffPlayFields(bp, pp)
 	for _, sec := range taskSections {
 		d.Changes = append(d.Changes, diffTaskList(sec.name, sec.get(bp), sec.get(pp))...)

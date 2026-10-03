@@ -89,6 +89,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/settings", s.handleSettingsGet)
 	s.mux.HandleFunc("PUT /api/settings", s.handleSettingsPut)
 	s.mux.HandleFunc("POST /api/ai/generate", s.handleAIGenerate)
+	s.mux.HandleFunc("POST /api/ai/proposals", s.handleAIProposalCreate)
+	s.mux.HandleFunc("POST /api/ai/merge", s.handleAIMerge)
 
 	// Embedded frontend; anything not under /api falls through to static.
 	if static, err := webfs.Static(); err == nil {
