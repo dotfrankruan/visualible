@@ -208,6 +208,7 @@ button.primary:disabled { opacity: 0.4; cursor: default; }
 .task-card:hover { border-color: #4a5160; }
 .task-card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .task-card.handler { border-left: 3px solid var(--warn); }
+.task-card.drop-target { border-top: 2px solid var(--accent); }
 
 .task-card .grip { color: var(--text-dim); cursor: grab; text-align: center; user-select: none; }
 .task-card .tname { font-weight: 600; }

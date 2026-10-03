@@ -360,15 +360,34 @@ function taskCard(t, kind, index, count) {
   const sel = store.editor.selected;
   const isSel = sel && sel.id === t.id;
   const notify = (t.notify?.length) ? ` ⚡ ${t.notify.join(', ')}` : '';
-  return el('div', {
+  const card = el('div', {
     class: `task-card ${kind}` + (isSel ? ' selected' : ''),
+    draggable: true,
     onclick: () => {
       store.editor.selected = { kind, id: t.id };
       renderCanvas();
       renderProps();
     },
+    ondragstart: (e) => {
+      e.dataTransfer.setData('text/plain', JSON.stringify({ id: t.id, kind }));
+      e.dataTransfer.effectAllowed = 'move';
+    },
+    ondragover: (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      card.classList.add('drop-target');
+    },
+    ondragleave: () => card.classList.remove('drop-target'),
+    ondrop: (e) => {
+      e.preventDefault();
+      card.classList.remove('drop-target');
+      try {
+        const src = JSON.parse(e.dataTransfer.getData('text/plain'));
+        if (src.kind === kind && src.id !== t.id) moveTaskToPosition(src.id, kind, index);
+      } catch { /* ignore foreign drops */ }
+    },
   },
-    el('div', { class: 'grip', title: 'Reorder with the arrows' }, '⋮⋮'),
+    el('div', { class: 'grip', title: 'Drag to reorder' }, '⋮⋮'),
     el('div', {},
       el('div', { class: 'tname' }, t.name || '(unnamed)'),
       el('div', { class: 'tmodule' }, t.module),
@@ -389,6 +408,20 @@ function taskCard(t, kind, index, count) {
       }, '✕'),
     ),
   );
+  return card;
+}
+
+// moveTaskToPosition reorders by drag-and-drop: insert src before the
+// position originally occupied by the drop target.
+function moveTaskToPosition(srcId, kind, targetIndex) {
+  store.commit('reorder', (proj) => {
+    const list = taskListOf(proj.playbooks[0].plays[0], kind);
+    const from = list.findIndex((t) => t.id === srcId);
+    if (from < 0) return;
+    const [moved] = list.splice(from, 1);
+    const to = from < targetIndex ? targetIndex - 1 : targetIndex;
+    list.splice(to, 0, moved);
+  });
 }
 
 function taskListOf(play, kind) {
@@ -672,6 +705,20 @@ function wireTabs() {
   $('#btn-edit-yaml').addEventListener('click', enterYamlEdit);
   $('#btn-apply-yaml').addEventListener('click', applyYamlEdit);
   $('#btn-cancel-yaml').addEventListener('click', exitYamlEdit);
+  $('#btn-download-yaml').addEventListener('click', async () => {
+    try {
+      const { yaml } = await api.render(store.currentPlaybook());
+      const blob = new Blob([yaml], { type: 'application/yaml' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${store.currentPlaybook()?.name ?? 'playbook'}.yml`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (e) {
+      const msg = e.problems?.length ? e.problems.join('\n') : e.message;
+      alert(`Cannot export: ${msg}`);
+    }
+  });
 }
 
 boot();
