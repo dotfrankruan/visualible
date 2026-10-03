@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/dotfrankruan/visualible/internal/logging"
 )
 
 // Cache persists normalized module metadata on disk so startup does not
@@ -145,6 +147,11 @@ func NewDiscovery(ctx context.Context, cacheDir string) (*Discovery, error) {
 	if err == nil {
 		d.inst = inst
 		d.doc = NewDocClient(inst)
+		logging.Info("ansible installation detected",
+			"version", inst.Version, "path", inst.Path,
+			"ansibleDoc", inst.AnsibleDocPath, "ansiblePlaybook", inst.PlaybookPath)
+	} else {
+		logging.Warn("ansible was not found on PATH", "err", err)
 	}
 	return d, nil
 }
@@ -229,19 +236,28 @@ func (d *Discovery) Modules(ctx context.Context, refresh bool) ([]ModuleSummary,
 	if d.doc == nil {
 		return nil, ErrNotFound
 	}
+	start := time.Now()
 	raw, err := d.doc.ListJSON(ctx)
 	if err != nil {
 		// Fall back to a stale cache rather than failing hard.
 		if list, ok := d.cache.List(); ok {
+			logging.Warn("module discovery failed; serving cached catalog",
+				"cached", len(list), "err", err)
 			return list, nil
 		}
 		return nil, err
 	}
 	list, err := NormalizeModuleList(raw)
 	if err != nil {
+		logging.Error("could not normalize the module list", "err", err)
 		return nil, err
 	}
-	_ = d.cache.StoreList(list) // cache write failure is non-fatal
+	if err := d.cache.StoreList(list); err != nil {
+		logging.Warn("could not persist the module cache", "err", err)
+	}
+	logging.Info("module discovery finished",
+		"modules", len(list),
+		"duration", time.Since(start).Round(time.Millisecond))
 	return list, nil
 }
 
@@ -267,8 +283,13 @@ func (d *Discovery) Module(ctx context.Context, fqcn string, refresh bool) (*Mod
 	}
 	schema, err := NormalizeModuleDoc(raw)
 	if err != nil {
+		logging.Warn("could not normalize module documentation", "module", fqcn, "err", err)
 		return nil, err
 	}
-	_ = d.cache.StoreSchema(schema)
+	if err := d.cache.StoreSchema(schema); err != nil {
+		logging.Warn("could not persist the module schema cache", "module", fqcn, "err", err)
+	}
+	logging.Debug("module schema loaded",
+		"module", fqcn, "options", len(schema.Options), "collection", schema.Collection)
 	return schema, nil
 }

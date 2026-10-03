@@ -8,6 +8,7 @@ import (
 	"github.com/dotfrankruan/visualible/internal/ai"
 	"github.com/dotfrankruan/visualible/internal/aidiff"
 	"github.com/dotfrankruan/visualible/internal/ir"
+	"github.com/dotfrankruan/visualible/internal/logging"
 )
 
 // --- AI change-proposal API ---
@@ -112,8 +113,19 @@ func (s *Server) handleAIProposalCreate(w http.ResponseWriter, r *http.Request) 
 		proposal.BaseHash = hash
 	}
 
+	logging.Info("ai proposal requested",
+		"proposal", proposal.ID,
+		"model", model,
+		"baseRevision", req.BaseRevision,
+		"baseHash", proposal.BaseHash,
+		"tasksInBase", baseTaskCount(base),
+		"intentChars", len(req.Intent))
+	start := time.Now()
 	proposed, err := ai.ProposeIR(r.Context(), provider, req.Intent, base)
 	if err != nil {
+		logging.Warn("ai proposal failed",
+			"proposal", proposal.ID, "model", model,
+			"duration", time.Since(start).Round(time.Millisecond), "err", err)
 		// Invalid AI output must never mutate project state — and it
 		// cannot: applying happens only through the merge endpoint,
 		// which validates again.
@@ -124,6 +136,11 @@ func (s *Server) handleAIProposalCreate(w http.ResponseWriter, r *http.Request) 
 	}
 	proposal.ProposedIR = proposed.Playbook
 	proposal.Rationale = proposed.Rationale
+	logging.Debug("ai response parsed",
+		"proposal", proposal.ID,
+		"duration", time.Since(start).Round(time.Millisecond),
+		"tasks", baseTaskCount(proposed.Playbook),
+		"rationaleLines", len(proposed.Rationale))
 
 	// Validate before displaying as applicable.
 	if verr := proposed.Playbook.Validate(); verr != nil {
@@ -140,7 +157,26 @@ func (s *Server) handleAIProposalCreate(w http.ResponseWriter, r *http.Request) 
 	// Visualible computes the diff; the model is not consulted about it.
 	proposal.Diff = aidiff.Playbooks(base, proposed.Playbook)
 	proposal.Status = ProposalReady
+	logging.Info("ai proposal ready",
+		"proposal", proposal.ID,
+		"added", proposal.Diff.Summary.Added,
+		"modified", proposal.Diff.Summary.Modified,
+		"removed", proposal.Diff.Summary.Removed,
+		"moved", proposal.Diff.Summary.Moved,
+		"unchanged", proposal.Diff.Summary.Unchanged)
 	writeJSON(w, http.StatusOK, proposal)
+}
+
+// baseTaskCount counts tasks across a playbook's plays.
+func baseTaskCount(pb *ir.Playbook) int {
+	if pb == nil {
+		return 0
+	}
+	n := 0
+	for _, p := range pb.Plays {
+		n += len(p.Tasks) + len(p.Handlers) + len(p.PreTasks) + len(p.PostTasks)
+	}
+	return n
 }
 
 type aiMergeRequest struct {
@@ -170,8 +206,14 @@ func (s *Server) handleAIMerge(w http.ResponseWriter, r *http.Request) {
 	}
 	merged, err := aidiff.Merge(req.Base, req.Proposed, d, accepted)
 	if err != nil {
+		logging.Warn("ai merge rejected",
+			"acceptedChanges", len(req.Accepted), "err", err)
 		writeError(w, http.StatusUnprocessableEntity, "merge_invalid", err.Error())
 		return
 	}
+	logging.Info("ai proposal applied",
+		"acceptedChanges", len(req.Accepted),
+		"totalChanges", len(d.Changes),
+		"tasksAfter", baseTaskCount(merged))
 	writeJSON(w, http.StatusOK, aiMergeResponse{Playbook: merged})
 }

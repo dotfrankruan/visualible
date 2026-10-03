@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/dotfrankruan/visualible/internal/ir"
+	"github.com/dotfrankruan/visualible/internal/logging"
 	"github.com/dotfrankruan/visualible/internal/store"
 )
 
@@ -78,6 +79,7 @@ func (s *Server) handleProjectCreate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "storage_error", err.Error())
 		return
 	}
+	logging.Info("project created", "project", p.ID, "name", p.Name)
 	writeJSON(w, http.StatusCreated, p)
 }
 
@@ -125,6 +127,7 @@ func (s *Server) handleProjectPut(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "storage_error", err.Error())
 		return
 	}
+	logging.Debug("project updated", "project", p.ID, "name", p.Name)
 	writeJSON(w, http.StatusOK, &p)
 }
 

@@ -18,6 +18,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/dotfrankruan/visualible/internal/ir"
+	"github.com/dotfrankruan/visualible/internal/logging"
 )
 
 // Store wraps the application database.
@@ -175,7 +176,15 @@ func (s *Store) SaveProject(ctx context.Context, p *ir.Project) error {
 		 ON CONFLICT(id) DO UPDATE SET name = excluded.name, data = excluded.data,
 		     updated_at = excluded.updated_at`,
 		p.ID, p.Name, string(data), p.CreatedAt.Format(timeFormat), p.UpdatedAt.Format(timeFormat))
-	return err
+	if err != nil {
+		logging.Error("could not save project", "project", p.ID, "err", err)
+		return err
+	}
+	logging.Debug("project saved",
+		"project", p.ID, "name", p.Name,
+		"playbooks", len(p.Playbooks), "inventories", len(p.Inventories),
+		"bytes", len(data))
+	return nil
 }
 
 // DeleteProject removes a project.
@@ -187,5 +196,6 @@ func (s *Store) DeleteProject(ctx context.Context, id string) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return fmt.Errorf("project %s: %w", id, ErrNotFound)
 	}
+	logging.Info("project deleted", "project", id)
 	return nil
 }

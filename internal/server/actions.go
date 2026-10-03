@@ -6,6 +6,7 @@ import (
 
 	"github.com/dotfrankruan/visualible/internal/action"
 	"github.com/dotfrankruan/visualible/internal/ir"
+	"github.com/dotfrankruan/visualible/internal/logging"
 	"github.com/dotfrankruan/visualible/internal/render"
 )
 
@@ -74,9 +75,12 @@ func (s *Server) handleActionGenerate(w http.ResponseWriter, r *http.Request) {
 	}
 	gen, err := action.Generate(req.Action, req.Params)
 	if err != nil {
+		logging.Warn("automation action rejected", "action", req.Action, "err", err)
 		writeError(w, http.StatusUnprocessableEntity, "action_failed", err.Error())
 		return
 	}
+	logging.Info("automation action generated",
+		"action", req.Action, "tasks", len(gen.Tasks), "handlers", len(gen.Handlers))
 	// Generated tasks must validate and render before they reach the
 	// editor — the curated path gets no shortcuts.
 	probe := &ir.Playbook{ID: "probe", Name: "probe", Plays: []*ir.Play{{
@@ -113,5 +117,13 @@ func (s *Server) handleActionRecognize(w http.ResponseWriter, r *http.Request) {
 	if recs == nil {
 		recs = []action.Recognition{}
 	}
+	matched := 0
+	for _, rec := range recs {
+		if rec.Recognized {
+			matched++
+		}
+	}
+	logging.Debug("tasks recognized",
+		"tasks", len(recs), "curated", matched, "advanced", len(recs)-matched)
 	writeJSON(w, http.StatusOK, actionRecognizeResponse{Recognitions: recs})
 }

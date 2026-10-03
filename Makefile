@@ -4,7 +4,7 @@ BINARY  := visualible
 PKG     := ./cmd/visualible
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
-.PHONY: all build generate test vet fmt check integration run clean
+.PHONY: all build generate test vet fmt check integration run run-verbose clean
 
 all: check build
 
@@ -38,6 +38,10 @@ integration:
 ## run: build and start the server
 run: build
 	./$(BINARY)
+
+## run-verbose: build and start with DEBUG logging on
+run-verbose: build
+	./$(BINARY) -verbose
 
 clean:
 	rm -f $(BINARY)

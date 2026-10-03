@@ -36,6 +36,38 @@ Configure with flags or environment variables:
 # or VISUALIBLE_ADDR / VISUALIBLE_PORT / VISUALIBLE_DATA_DIR
 ```
 
+### Logging
+
+The console reports every level with standard severity ranks, so output can
+be filtered and parsed by ordinary tooling:
+
+```text
+2026-10-03T19:42:11.123+02:00 INFO  ansible detected         version=2.21.4 modules=8862
+2026-10-03T19:42:11.201+02:00 DEBUG http request            method=GET path=/api/actions status=200 duration=1.2ms
+2026-10-03T19:42:12.004+02:00 WARN  connection test failed  host=web01 message="The SSH login was refused…"
+2026-10-03T19:42:12.010+02:00 ERROR deployment failed       deployment=dep-1 exitCode=2
+```
+
+| Flag | Purpose |
+| --- | --- |
+| `-verbose` | shorthand for `-log-level=debug`: full detail (requests, `ansible-doc` invocations, rendered commands, Ansible output, deployment events) |
+| `-log-level` | `debug`, `info` (default), `warn`, `error`, `fatal` |
+| `-log-format` | `text` (default) or `json` for log pipelines |
+
+Environment equivalents: `VISUALIBLE_VERBOSE=1`,
+`VISUALIBLE_LOG_LEVEL=debug`, `VISUALIBLE_LOG_FORMAT=json`.
+
+Default output stays calm: successful requests and internal steps are
+DEBUG; failed connections, client errors and rejections are WARN; server
+errors and failed deployments are ERROR; unrecoverable startup problems are
+FATAL (logged, then exit 1). Logs go to stderr, the startup banner to
+stdout, so `./visualible > banner.txt` still gives a clean summary.
+
+**Secrets never reach the console.** The logger redacts any value logged
+under a sensitive key (`secret`, `password`, `token`, `api_key`, …) in both
+text and JSON formats, and credential logging emits metadata only — which
+is assert-tested.
+
 Run the test suite (no network or Ansible required):
 
 ```bash
@@ -159,6 +191,7 @@ Go packages:
 | `internal/deploy` | `Backend` interface + capabilities, event normalization, deployment manager. |
 | `internal/deploy` (Ansible SSH) | The one real v0.1 backend: workspace render, credential materialization, preflight, process-group exec, event tailing. |
 | `internal/store` | SQLite (pure Go): projects as IR documents, encrypted credentials, deployments, settings. |
+| `internal/logging` | Leveled console logger (DEBUG/INFO/WARN/ERROR/FATAL), text or JSON, with secret redaction. |
 | `internal/action` | Curated beginner Actions: Action → IR generation (incl. compound) and strict IR → Action recognition. Presentation layer only. |
 | `internal/ai` | Provider abstraction + OpenAI-compatible adapter; intent → validated IR proposals with rationale. |
 | `internal/aidiff` | IR-aware semantic diff (Added/Removed/Modified/Moved, field-level) and selective merge with validation. |

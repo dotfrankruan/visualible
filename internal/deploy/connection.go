@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/dotfrankruan/visualible/internal/ir"
+	"github.com/dotfrankruan/visualible/internal/logging"
 	"github.com/dotfrankruan/visualible/internal/render"
 )
 
@@ -119,6 +120,15 @@ func (b *AnsibleBackend) TestConnection(ctx context.Context, host *ir.Host, secr
 	default:
 		res.Message = userFacingConnectionError(res.Details)
 	}
+	if res.OK {
+		logging.Debug("connection test succeeded",
+			"host", res.Host, "address", res.Address, "duration", time.Since(start).Round(time.Millisecond))
+	} else {
+		logging.Warn("connection test failed",
+			"host", res.Host, "address", res.Address, "message", res.Message,
+			"duration", time.Since(start).Round(time.Millisecond))
+		logging.Debug("connection test output", "host", res.Host, "details", res.Details)
+	}
 	return res
 }
 
@@ -170,6 +180,7 @@ type PreflightResult struct {
 // anything runs.
 func (b *AnsibleBackend) TestConnections(ctx context.Context, inventory *ir.Inventory, secrets SecretResolver) PreflightResult {
 	hosts := flattenHosts(inventory)
+	logging.Info("checking connections", "machines", len(hosts))
 	res := PreflightResult{Total: len(hosts), Hosts: make([]PreflightHost, len(hosts))}
 	if len(hosts) == 0 {
 		return res
@@ -201,6 +212,7 @@ func (b *AnsibleBackend) TestConnections(ctx context.Context, inventory *ir.Inve
 			res.Reachable++
 		}
 	}
+	logging.Info("connection check finished", "reachable", res.Reachable, "total", res.Total)
 	return res
 }
 

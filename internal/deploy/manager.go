@@ -3,11 +3,11 @@ package deploy
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
 	"github.com/dotfrankruan/visualible/internal/ir"
+	"github.com/dotfrankruan/visualible/internal/logging"
 	"github.com/dotfrankruan/visualible/internal/store"
 )
 
@@ -56,6 +56,18 @@ func (m *Manager) Start(ctx context.Context, plan *ir.DeploymentPlan, project *i
 		Status:    ir.DeploymentPending,
 		StartedAt: time.Now().UTC(),
 	}
+	logging.Info("deployment requested",
+		"deployment", plan.ID,
+		"project", plan.ProjectID,
+		"backend", m.backend.ID(),
+		"playbook", plan.PlaybookID,
+		"inventory", plan.InventoryID,
+		"check", plan.Check,
+		"diff", plan.Diff,
+		"limit", plan.Limit,
+		"tags", plan.Tags,
+		"verbosity", plan.Verbosity)
+	logging.Debug("deployment validated and accepted", "deployment", d.ID)
 	rs := &runState{deployment: d, subs: map[chan ir.DeploymentEvent]bool{}}
 	m.mu.Lock()
 	m.runs[d.ID] = rs
@@ -85,7 +97,7 @@ func (m *Manager) run(ctx context.Context, plan *ir.DeploymentPlan, project *ir.
 		m.mu.Unlock()
 		if m.store != nil {
 			if err := m.store.SaveDeployment(ctx, d); err != nil {
-				log.Printf("deploy: persist status: %v", err)
+				logging.Error("could not persist deployment status", "deployment", d.ID, "err", err)
 			}
 		}
 	}
@@ -99,20 +111,36 @@ func (m *Manager) run(ctx context.Context, plan *ir.DeploymentPlan, project *ir.
 		_ = m.store.SaveDeployment(ctx, d)
 	}
 
+	prepareStart := time.Now()
 	prepared, err := m.backend.Prepare(ctx, plan, project, m.secrets)
 	if err != nil {
+		logging.Error("deployment preparation failed",
+			"deployment", d.ID, "duration", time.Since(prepareStart).Round(time.Millisecond), "err", err)
 		sink.Emit(finishEvent(d.ID, "prepare failed: "+err.Error()))
 		setStatus(ir.DeploymentFailed, nil)
 		m.finish(rs)
 		return
 	}
+	logging.Info("deployment prepared",
+		"deployment", d.ID,
+		"workspace", prepared.Workspace,
+		"duration", time.Since(prepareStart).Round(time.Millisecond))
 	defer func() {
 		if err := m.backend.Cleanup(ctx, prepared); err != nil {
-			log.Printf("deploy: cleanup: %v", err)
+			logging.Warn("deployment workspace cleanup failed",
+				"deployment", d.ID, "workspace", prepared.Workspace, "err", err)
+		} else {
+			logging.Debug("deployment workspace removed", "deployment", d.ID)
 		}
 	}()
 
+	execStart := time.Now()
+	logging.Debug("executing deployment", "deployment", d.ID)
 	exitCode, execErr := m.backend.Execute(ctx, prepared, sink)
+	logging.Debug("deployment process finished",
+		"deployment", d.ID,
+		"exitCode", exitCode,
+		"duration", time.Since(execStart).Round(time.Millisecond))
 	if execErr != nil {
 		sink.Emit(finishEvent(d.ID, "execution error: "+execErr.Error()))
 	}
@@ -123,10 +151,19 @@ func (m *Manager) run(ctx context.Context, plan *ir.DeploymentPlan, project *ir.
 
 	switch {
 	case canceled:
+		logging.Warn("deployment canceled", "deployment", d.ID, "exitCode", exitCode)
 		setStatus(ir.DeploymentCanceled, &exitCode)
 	case exitCode == 0 && execErr == nil:
+		logging.Info("deployment succeeded",
+			"deployment", d.ID,
+			"duration", time.Since(execStart).Round(time.Millisecond))
 		setStatus(ir.DeploymentSucceeded, &exitCode)
 	default:
+		logging.Error("deployment failed",
+			"deployment", d.ID,
+			"exitCode", exitCode,
+			"duration", time.Since(execStart).Round(time.Millisecond),
+			"err", execErr)
 		setStatus(ir.DeploymentFailed, &exitCode)
 	}
 	m.finish(rs)
@@ -156,6 +193,7 @@ func (m *Manager) removeRun(id string) {
 
 // Cancel requests cancellation via the backend.
 func (m *Manager) Cancel(ctx context.Context, deploymentID string) error {
+	logging.Info("deployment cancellation requested", "deployment", deploymentID)
 	return m.backend.Cancel(ctx, deploymentID)
 }
 
@@ -183,6 +221,7 @@ func (m *Manager) Subscribe(id string, buffer int) (<-chan ir.DeploymentEvent, f
 	}
 	ch := make(chan ir.DeploymentEvent, buffer)
 	rs.subs[ch] = true
+	logging.Debug("event subscriber attached", "deployment", id, "subscribers", len(rs.subs)+1)
 	unsub := func() {
 		m.mu.Lock()
 		if _, ok := rs.subs[ch]; ok {
@@ -203,9 +242,18 @@ type managerSink struct {
 }
 
 func (s *managerSink) Emit(ev ir.DeploymentEvent) {
+	logging.Debug("deployment event",
+		"deployment", ev.DeploymentID,
+		"type", ev.Type,
+		"play", ev.Play,
+		"task", ev.Task,
+		"host", ev.Host,
+		"status", ev.Status,
+		"changed", ev.Changed,
+		"duration", time.Duration(ev.DurationMS)*time.Millisecond)
 	if s.m.store != nil {
 		if err := s.m.store.AppendDeploymentEvent(context.Background(), &ev); err != nil {
-			log.Printf("deploy: persist event: %v", err)
+			logging.Error("could not persist deployment event", "deployment", ev.DeploymentID, "err", err)
 		}
 	}
 	s.m.mu.Lock()

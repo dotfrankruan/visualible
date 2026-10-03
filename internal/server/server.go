@@ -6,13 +6,13 @@ package server
 import (
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 	"strings"
 
 	"github.com/dotfrankruan/visualible/internal/ansible"
 	"github.com/dotfrankruan/visualible/internal/deploy"
 	"github.com/dotfrankruan/visualible/internal/ir"
+	"github.com/dotfrankruan/visualible/internal/logging"
 	"github.com/dotfrankruan/visualible/internal/render"
 	"github.com/dotfrankruan/visualible/internal/store"
 	webfs "github.com/dotfrankruan/visualible/internal/web"
@@ -35,7 +35,7 @@ func New(discovery *ansible.Discovery, st *store.Store, manager *deploy.Manager)
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s.mux.ServeHTTP(w, r)
+	withRequestLogging(s.mux).ServeHTTP(w, r)
 }
 
 // --- Structured API errors ---
@@ -58,7 +58,7 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(v); err != nil {
-		log.Printf("api: encode response: %v", err)
+		logging.Error("could not encode API response", "err", err)
 	}
 }
 
@@ -104,7 +104,7 @@ func (s *Server) routes() {
 	if static, err := webfs.Static(); err == nil {
 		s.mux.Handle("GET /", http.FileServer(http.FS(static)))
 	} else {
-		log.Printf("web: embedded frontend unavailable: %v", err)
+		logging.Error("embedded frontend unavailable", "err", err)
 	}
 }
 

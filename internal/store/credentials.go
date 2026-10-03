@@ -11,6 +11,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/dotfrankruan/visualible/internal/logging"
 )
 
 // Credential kinds supported by v0.1. The set is open-ended; deployment
@@ -138,8 +140,11 @@ func (s *Store) SaveCredential(ctx context.Context, id, name, kind string, secre
 		     secret = excluded.secret, updated_at = excluded.updated_at`,
 		id, name, kind, blob, created.Format(timeFormat), now.Format(timeFormat))
 	if err != nil {
+		logging.Error("could not store credential", "credential", id, "kind", kind, "err", err)
 		return nil, err
 	}
+	// Only metadata is ever logged; the secret (and its length) is not.
+	logging.Info("credential stored", "credential", id, "name", name, "kind", kind)
 	return &CredentialMeta{ID: id, Name: name, Kind: kind, HasSecret: true, CreatedAt: created, UpdatedAt: now}, nil
 }
 
@@ -222,6 +227,7 @@ func (s *Store) DeleteCredential(ctx context.Context, id string) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return fmt.Errorf("credential %s: %w", id, ErrNotFound)
 	}
+	logging.Info("credential deleted", "credential", id)
 	return nil
 }
 

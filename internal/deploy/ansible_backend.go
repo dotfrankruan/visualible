@@ -15,6 +15,7 @@ import (
 
 	"github.com/dotfrankruan/visualible/internal/ansible"
 	"github.com/dotfrankruan/visualible/internal/ir"
+	"github.com/dotfrankruan/visualible/internal/logging"
 	"github.com/dotfrankruan/visualible/internal/render"
 )
 
@@ -200,6 +201,7 @@ func (b *AnsibleBackend) Prepare(ctx context.Context, plan *ir.DeploymentPlan, p
 	if err != nil {
 		return nil, err
 	}
+	logging.Debug("deployment workspace created", "deployment", plan.ID, "workspace", ws)
 	prepared := &PreparedDeployment{ID: plan.ID, Plan: plan, Workspace: ws}
 	cleanupOnErr := func(err error) (*PreparedDeployment, error) {
 		_ = b.Cleanup(ctx, prepared)
@@ -253,13 +255,24 @@ func (b *AnsibleBackend) Prepare(ctx context.Context, plan *ir.DeploymentPlan, p
 
 	// 4. Preflight: syntax check (structured args, never a shell).
 	syntaxArgs := []string{"-i", "inventory.yml", "playbook.yml", "--syntax-check"}
+	logging.Debug("running syntax check",
+		"deployment", plan.ID,
+		"executable", b.inst.PlaybookPath,
+		"args", syntaxArgs)
+	syntaxStart := time.Now()
 	if code, err := b.runner.Run(ctx, RunOpts{
 		Path: b.inst.PlaybookPath, Args: syntaxArgs, Dir: ws,
 		Env: workspaceEnv(ws, eventFile),
 	}); err != nil {
+		logging.Error("could not run the syntax check", "deployment", plan.ID, "err", err)
 		return cleanupOnErr(fmt.Errorf("preflight: run ansible-playbook: %w", err))
 	} else if code != 0 {
+		logging.Error("syntax check failed", "deployment", plan.ID, "exitCode", code)
 		return cleanupOnErr(fmt.Errorf("preflight: ansible-playbook --syntax-check failed (exit %d)", code))
+	} else {
+		logging.Debug("syntax check passed",
+			"deployment", plan.ID,
+			"duration", time.Since(syntaxStart).Round(time.Millisecond))
 	}
 
 	// 5. Build the execution invocation.
@@ -284,6 +297,10 @@ func (b *AnsibleBackend) Prepare(ctx context.Context, plan *ir.DeploymentPlan, p
 		Args:      args,
 		Env:       workspaceEnv(ws, eventFile),
 	}
+	logging.Debug("execution command prepared",
+		"deployment", plan.ID,
+		"executable", b.inst.PlaybookPath,
+		"args", args)
 	return prepared, nil
 }
 
@@ -435,6 +452,9 @@ func (b *AnsibleBackend) Execute(ctx context.Context, prepared *PreparedDeployme
 			ev.Type = ir.EventLogStderr
 		}
 		ev.Message = line
+		// Raw Ansible output is also mirrored to the console so verbose
+		// mode shows the full deployment transcript.
+		logging.Debug("ansible output", "deployment", prepared.ID, "stream", stream, "line", line)
 		sink.Emit(ev)
 	}}
 
@@ -542,6 +562,7 @@ func (b *AnsibleBackend) Cancel(ctx context.Context, deploymentID string) error 
 	if !ok {
 		return fmt.Errorf("deployment %q is not running", deploymentID)
 	}
+	logging.Info("killing the deployment process group", "deployment", deploymentID)
 	cancel()
 	return nil
 }
@@ -550,6 +571,7 @@ func (b *AnsibleBackend) Cleanup(ctx context.Context, prepared *PreparedDeployme
 	if prepared.Workspace == "" {
 		return nil
 	}
+	logging.Debug("removing deployment workspace", "workspace", prepared.Workspace)
 	// Restrict to our own temp workspaces before deleting.
 	if !strings.Contains(filepath.Base(prepared.Workspace), "visualible-deploy-") {
 		return fmt.Errorf("refusing to clean up unexpected workspace %q", prepared.Workspace)

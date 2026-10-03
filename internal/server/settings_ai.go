@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/dotfrankruan/visualible/internal/ai"
+	"github.com/dotfrankruan/visualible/internal/logging"
 	"github.com/dotfrankruan/visualible/internal/parse"
 	"github.com/dotfrankruan/visualible/internal/store"
 )
@@ -45,6 +46,15 @@ func (s *Server) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 	if s.discovery != nil {
 		s.discovery.ApplyOverrides(r.Context(), st.AnsiblePath, st.AnsibleDocPath, st.AnsiblePlaybookPath)
 	}
+	// Only non-secret configuration is logged; AI/S3 keys live in the
+	// credential store as references.
+	logging.Info("settings saved",
+		"ansiblePath", st.AnsiblePath,
+		"aiEndpoint", st.AI.Endpoint,
+		"aiModel", st.AI.Model,
+		"aiKeyCredential", st.AI.APIKeyCredID,
+		"s3Endpoint", st.S3.Endpoint,
+		"s3Bucket", st.S3.Bucket)
 	writeJSON(w, http.StatusOK, &st)
 }
 

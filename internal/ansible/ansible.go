@@ -13,6 +13,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/dotfrankruan/visualible/internal/logging"
 )
 
 // Installation describes a detected local Ansible installation.
@@ -118,10 +120,17 @@ func NewDocClientWith(docPath string, output OutputFunc) *DocClient {
 func (c *DocClient) run(ctx context.Context, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
+	start := time.Now()
+	logging.Debug("running ansible-doc", "executable", c.docPath, "args", args)
 	out, err := c.output(ctx, c.docPath, args...)
+	duration := time.Since(start).Round(time.Millisecond)
 	if err != nil {
+		logging.Warn("ansible-doc failed",
+			"args", args, "duration", duration, "err", err)
 		return nil, fmt.Errorf("ansible-doc %s: %w", strings.Join(args, " "), err)
 	}
+	logging.Debug("ansible-doc finished",
+		"args", args, "bytes", len(out), "duration", duration)
 	return out, nil
 }
 
