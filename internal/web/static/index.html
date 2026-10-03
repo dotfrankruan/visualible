@@ -11,12 +11,31 @@
     <div class="brand">Visualible</div>
     <div id="ansible-status" class="status-pill" title="Ansible detection status">…</div>
     <div class="spacer"></div>
+    <button id="btn-projects" class="tool" title="Open / create projects">Projects</button>
+    <span id="project-bar">
+      <span id="project-name">—</span><span id="project-dirty" class="dirty-dot" title="Unsaved changes">●</span>
+    </span>
+    <button id="btn-save" class="tool" disabled title="Save project (Ctrl/Cmd+S)">Save</button>
     <button id="btn-undo" class="tool" title="Undo" disabled>↶ Undo</button>
     <button id="btn-redo" class="tool" title="Redo" disabled>↷ Redo</button>
     <button id="btn-run" class="tool" disabled title="Deployment arrives in a later phase">Run</button>
     <button id="btn-deploy" class="tool" disabled title="Deployment arrives in a later phase">Deploy</button>
     <button id="btn-settings" class="tool" disabled title="Settings arrive in a later phase">Settings</button>
   </header>
+
+  <div id="project-modal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <span>Projects</span>
+        <button id="project-modal-close" class="mini-btn">✕</button>
+      </div>
+      <div id="project-list" class="scroll"></div>
+      <form id="project-new-form">
+        <input id="project-new-name" type="text" placeholder="New project name" required>
+        <button class="primary" type="submit">Create</button>
+      </form>
+    </div>
+  </div>
 
   <main id="app-main">
     <aside id="module-panel">

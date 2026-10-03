@@ -21,15 +21,16 @@ export const server = {
   modules: [],               // module catalog summaries
   moduleSchemas: new Map(),  // fqcn -> normalized schema
   ansibleError: null,        // structured API error when discovery unavailable
+  projects: [],              // project metadata list
 };
 
 // ---------- Editor state (working IR + history) ----------
 
 export const editor = {
-  playbook: null,   // ir.Playbook (source of truth for the canvas/YAML)
+  project: null,    // ir.Project (source of truth; playbook = playbooks[0])
   selected: null,   // { kind: 'task'|'handler', id } | null
   dirty: false,
-  past: [],         // undo stack of serialized playbooks
+  past: [],         // undo stack of serialized projects
   future: [],       // redo stack
 };
 
@@ -48,7 +49,7 @@ export const ui = {
 const HISTORY_LIMIT = 100;
 
 function snapshot() {
-  return JSON.stringify(editor.playbook);
+  return JSON.stringify(editor.project);
 }
 
 // commit records the pre-mutation snapshot for undo, applies the mutation,
@@ -57,7 +58,7 @@ export function commit(label, mutate) {
   editor.past.push(snapshot());
   if (editor.past.length > HISTORY_LIMIT) editor.past.shift();
   editor.future = [];
-  mutate(editor.playbook);
+  mutate(editor.project);
   editor.dirty = true;
   ui.yamlDirty = true;
   emit('editor', { label });
@@ -67,9 +68,10 @@ export function commit(label, mutate) {
 export function undo() {
   if (editor.past.length === 0) return;
   editor.future.push(snapshot());
-  editor.playbook = JSON.parse(editor.past.pop());
+  editor.project = JSON.parse(editor.past.pop());
   editor.dirty = true;
   ui.yamlDirty = true;
+  if (editor.selected && !findTask(editor.selected.id)) editor.selected = null;
   emit('editor', { label: 'undo' });
   emit('history');
 }
@@ -77,9 +79,10 @@ export function undo() {
 export function redo() {
   if (editor.future.length === 0) return;
   editor.past.push(snapshot());
-  editor.playbook = JSON.parse(editor.future.pop());
+  editor.project = JSON.parse(editor.future.pop());
   editor.dirty = true;
   ui.yamlDirty = true;
+  if (editor.selected && !findTask(editor.selected.id)) editor.selected = null;
   emit('editor', { label: 'redo' });
   emit('history');
 }
@@ -91,8 +94,12 @@ export function newId(prefix) {
   return `${prefix}-${Date.now().toString(36)}-${(idCounter++).toString(36)}`;
 }
 
+export function currentPlaybook() {
+  return editor.project?.playbooks?.[0] ?? null;
+}
+
 export function currentPlay() {
-  return editor.playbook?.plays?.[0] ?? null;
+  return currentPlaybook()?.plays?.[0] ?? null;
 }
 
 export function findTask(id) {
@@ -103,23 +110,23 @@ export function findTask(id) {
   return null;
 }
 
-export function initPlaybook() {
-  editor.playbook = {
-    id: newId('pb'),
-    name: 'Untitled playbook',
-    plays: [{
-      id: newId('play'),
-      name: 'New play',
-      hosts: 'all',
-      tasks: [],
-      handlers: [],
-    }],
-  };
+// loadProject replaces the editor content (open from server / new).
+// History is reset: undo must never cross a project boundary.
+export function loadProject(project) {
+  editor.project = project;
   editor.selected = null;
   editor.past = [];
   editor.future = [];
   editor.dirty = false;
   ui.yamlDirty = true;
-  emit('editor', { label: 'init' });
+  emit('editor', { label: 'load' });
   emit('history');
+  emit('project');
+}
+
+// markSaved clears the dirty flag after a successful save.
+export function markSaved(project) {
+  if (project) editor.project = project;
+  editor.dirty = false;
+  emit('project');
 }

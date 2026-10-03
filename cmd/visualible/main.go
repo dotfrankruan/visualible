@@ -17,6 +17,7 @@ import (
 
 	"github.com/visualible/visualible/internal/ansible"
 	"github.com/visualible/visualible/internal/server"
+	"github.com/visualible/visualible/internal/store"
 )
 
 var version = "0.1.0"
@@ -43,8 +44,15 @@ func main() {
 		logger.Fatalf("ansible discovery: %v", err)
 	}
 
+	dbPath := filepath.Join(*dataDir, "visualible.db")
+	st, err := store.Open(dbPath)
+	if err != nil {
+		logger.Fatalf("open database: %v", err)
+	}
+	defer st.Close()
+
 	server.Version = version
-	srv, err := server.New(discovery)
+	srv, err := server.New(discovery, st)
 	if err != nil {
 		logger.Fatalf("server: %v", err)
 	}
@@ -68,7 +76,7 @@ func main() {
 	} else {
 		fmt.Println("Modules: not yet discovered (will populate on first use)")
 	}
-	fmt.Printf("Data: %s\n", *dataDir)
+	fmt.Printf("Database: %s\n", dbPath)
 	fmt.Printf("Listening: http://%s\n", listen)
 
 	errCh := make(chan error, 1)

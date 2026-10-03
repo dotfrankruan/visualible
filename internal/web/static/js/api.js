@@ -21,4 +21,16 @@ export const api = {
   modules: (refresh = false) => request(`/api/modules${refresh ? '?refresh=1' : ''}`),
   moduleDoc: (fqcn) => request(`/api/modules/${encodeURIComponent(fqcn)}`),
   render: (playbook) => request('/api/render', { method: 'POST', body: JSON.stringify({ playbook }) }),
+
+  projects: () => request('/api/projects'),
+  createProject: (name, description) =>
+    request('/api/projects', { method: 'POST', body: JSON.stringify({ name, description }) }),
+  project: (id) => request(`/api/projects/${encodeURIComponent(id)}`),
+  saveProject: (project) =>
+    request(`/api/projects/${encodeURIComponent(project.id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(project),
+    }),
+  deleteProject: (id) =>
+    request(`/api/projects/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };

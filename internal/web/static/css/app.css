@@ -382,3 +382,72 @@ pre.yaml .yn { color: #d8a13c; }
 pre.yaml .yd { color: var(--warn); }
 
 .yaml-error { color: var(--err); font-size: 12px; white-space: pre-wrap; }
+
+/* Project bar + modal */
+
+#project-bar { color: var(--text); font-size: 12px; }
+.dirty-dot { color: var(--warn); margin-left: 4px; }
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.modal.hidden { display: none; }
+
+.modal-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: 480px;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+
+#project-list { padding: 8px; flex: 1; min-height: 120px; }
+
+.project-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 6px;
+}
+.project-info { flex: 1; min-width: 0; }
+.project-title { font-weight: 600; }
+.project-meta { color: var(--text-dim); font-size: 11px; }
+
+#project-new-form {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+}
+#project-new-form input {
+  flex: 1;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.mini-btn.danger:hover { color: var(--err); border-color: var(--err); }

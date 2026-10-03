@@ -12,10 +12,14 @@ const $ = (sel) => document.querySelector(sel);
 // ---------- Boot ----------
 
 async function boot() {
-  store.initPlaybook();
   wireChrome();
   wireCanvas();
   wireTabs();
+  wireProjectModal();
+
+  store.on('editor', () => { renderCanvas(); renderProps(); renderProjectBar(); });
+  store.on('history', renderHistoryButtons);
+  store.on('project', renderProjectBar);
 
   try {
     const health = await api.health();
@@ -25,11 +29,36 @@ async function boot() {
     renderAnsibleStatus(e);
   }
 
-  await loadModules(false);
-  store.on('editor', () => { renderCanvas(); renderProps(); });
-  store.on('history', renderHistoryButtons);
+  await Promise.all([loadModules(false), openInitialProject()]);
   renderCanvas();
   renderProps();
+  renderProjectBar();
+}
+
+async function openInitialProject() {
+  try {
+    const { projects } = await api.projects();
+    store.server.projects = projects;
+    if (projects.length) {
+      const p = await api.project(projects[0].id);
+      store.loadProject(p);
+      return;
+    }
+  } catch { /* storage unavailable: fall through to a fresh local project */ }
+  store.loadProject(freshProject());
+}
+
+function freshProject() {
+  return {
+    id: store.newId('proj'),
+    name: 'Untitled project',
+    playbooks: [{
+      id: store.newId('pb'),
+      name: 'playbook',
+      plays: [{ id: store.newId('play'), name: 'New play', hosts: 'all', tasks: [], handlers: [] }],
+    }],
+    inventories: [],
+  };
 }
 
 function renderAnsibleStatus(err) {
@@ -62,6 +91,120 @@ async function loadModules(refresh) {
   }
   renderModuleBrowser();
   renderAnsibleStatus();
+}
+
+// ---------- Project bar / persistence ----------
+
+function renderProjectBar() {
+  const p = store.editor.project;
+  $('#project-name').textContent = p ? p.name : '—';
+  $('#project-dirty').style.display = store.editor.dirty ? '' : 'none';
+  $('#btn-save').disabled = !store.editor.dirty;
+}
+
+async function saveProject() {
+  const p = store.editor.project;
+  if (!p) return;
+  $('#btn-save').disabled = true;
+  try {
+    const saved = await api.saveProject(p);
+    store.markSaved(saved);
+  } catch (e) {
+    const msg = e.problems?.length ? e.problems.join('\n') : e.message;
+    alert(`Save failed:\n${msg}`);
+    $('#btn-save').disabled = false;
+  }
+}
+
+function wireProjectModal() {
+  $('#btn-save').addEventListener('click', saveProject);
+  $('#btn-projects').addEventListener('click', openProjectModal);
+  $('#project-modal-close').addEventListener('click', closeProjectModal);
+  $('#project-modal').addEventListener('click', (e) => {
+    if (e.target.id === 'project-modal') closeProjectModal();
+  });
+  $('#project-new-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = $('#project-new-name').value.trim();
+    if (!name) return;
+    try {
+      const p = await api.createProject(name, '');
+      store.loadProject(p);
+      closeProjectModal();
+    } catch (err) {
+      alert(`Create failed: ${err.message}`);
+    }
+  });
+}
+
+async function openProjectModal() {
+  $('#project-modal').classList.remove('hidden');
+  $('#project-new-name').value = '';
+  await refreshProjectList();
+}
+
+function closeProjectModal() {
+  $('#project-modal').classList.add('hidden');
+}
+
+async function refreshProjectList() {
+  const listEl = $('#project-list');
+  listEl.replaceChildren(el('div', { class: 'empty-state' }, 'Loading…'));
+  try {
+    const { projects } = await api.projects();
+    store.server.projects = projects;
+    listEl.replaceChildren();
+    if (!projects.length) {
+      listEl.append(el('div', { class: 'empty-state' }, 'No projects yet. Create one below.'));
+      return;
+    }
+    for (const m of projects) {
+      const isCurrent = store.editor.project?.id === m.id;
+      listEl.append(el('div', { class: 'project-row' },
+        el('div', { class: 'project-info' },
+          el('div', { class: 'project-title' }, m.name + (isCurrent ? ' (open)' : '')),
+          el('div', { class: 'project-meta' }, `updated ${new Date(m.updatedAt).toLocaleString()}`)),
+        el('button', {
+          class: 'mini-btn', disabled: isCurrent,
+          onclick: () => openProject(m.id),
+        }, 'Open'),
+        el('button', {
+          class: 'mini-btn danger',
+          onclick: () => deleteProject(m.id, m.name),
+        }, 'Delete'),
+      ));
+    }
+  } catch (e) {
+    listEl.replaceChildren(el('div', { class: 'empty-state' }, `Could not load projects: ${e.message}`));
+  }
+}
+
+async function openProject(id) {
+  if (store.editor.dirty && !confirm('Discard unsaved changes?')) return;
+  try {
+    const p = await api.project(id);
+    store.loadProject(p);
+    renderCanvas();
+    renderProps();
+    closeProjectModal();
+  } catch (e) {
+    alert(`Open failed: ${e.message}`);
+  }
+}
+
+async function deleteProject(id, name) {
+  if (!confirm(`Delete project “${name}”? This cannot be undone.`)) return;
+  try {
+    await api.deleteProject(id);
+    if (store.editor.project?.id === id) {
+      store.loadProject(freshProject());
+      renderCanvas();
+      renderProps();
+    }
+    await refreshProjectList();
+  } catch (e) {
+    alert(`Delete failed: ${e.message}`);
+  }
 }
 
 // ---------- Module browser ----------
@@ -167,8 +310,8 @@ async function addTaskFromModule(kind) {
     }
   } catch { /* schema is optional at add time */ }
 
-  store.commit(`add ${kind}`, (pb) => {
-    const play = pb.plays[0];
+  store.commit(`add ${kind}`, (proj) => {
+    const play = proj.playbooks[0].plays[0];
     if (kind === 'handler') {
       play.handlers = play.handlers ?? [];
       play.handlers.push(task);
@@ -219,7 +362,7 @@ function taskCard(t, kind, index, count) {
       renderProps();
     },
   },
-    el('div', { class: 'grip', title: 'Drag to reorder (arrows for now)' }, '⋮⋮'),
+    el('div', { class: 'grip', title: 'Reorder with the arrows' }, '⋮⋮'),
     el('div', {},
       el('div', { class: 'tname' }, t.name || '(unnamed)'),
       el('div', { class: 'tmodule' }, t.module),
@@ -243,12 +386,12 @@ function taskCard(t, kind, index, count) {
 }
 
 function taskListOf(play, kind) {
-  return kind === 'handler' ? play.handlers : play.tasks;
+  return kind === 'handler' ? (play.handlers = play.handlers ?? []) : play.tasks;
 }
 
 function moveTask(id, kind, delta) {
-  store.commit('reorder', (pb) => {
-    const list = taskListOf(pb.plays[0], kind);
+  store.commit('reorder', (proj) => {
+    const list = taskListOf(proj.playbooks[0].plays[0], kind);
     const i = list.findIndex((t) => t.id === id);
     const j = i + delta;
     if (i < 0 || j < 0 || j >= list.length) return;
@@ -257,9 +400,8 @@ function moveTask(id, kind, delta) {
 }
 
 function deleteTask(id, kind) {
-  store.commit('delete', (pb) => {
-    const play = pb.plays[0];
-    const list = taskListOf(play, kind);
+  store.commit('delete', (proj) => {
+    const list = taskListOf(proj.playbooks[0].plays[0], kind);
     const i = list.findIndex((t) => t.id === id);
     if (i >= 0) list.splice(i, 1);
   });
@@ -324,7 +466,7 @@ async function renderProps() {
   const play = store.currentPlay();
   const handlerNames = (play.handlers ?? []).map((h) => h.name);
   if (kind !== 'handler' && handlerNames.length) {
-    const select = el('select', { multiple: '', size: String(Math.min(handlerNames.length, 4)) });
+    const select = el('select', { multiple: true, size: String(Math.min(handlerNames.length, 4)) });
     for (const n of handlerNames) {
       const o = el('option', { value: n }, n);
       if ((task.notify ?? []).includes(n)) o.selected = true;
@@ -365,7 +507,7 @@ async function renderProps() {
     argsSection.append(formWrap);
   } catch (e) {
     status.textContent = store.server.ansibleError?.code === 'ansible_unavailable'
-      ? 'Schema unavailable: Ansible is not detected. You can still edit raw arguments via YAML.'
+      ? 'Schema unavailable: Ansible is not detected.'
       : `Could not load schema for ${task.module}: ${e.message}`;
   }
 }
@@ -386,7 +528,7 @@ async function renderYamlView() {
   status.textContent = 'rendering…';
   status.className = 'hint-line';
   try {
-    const { yaml } = await api.render(store.editor.playbook);
+    const { yaml } = await api.render(store.currentPlaybook());
     renderYaml(pre, yaml);
     status.textContent = 'rendered from current editor state';
     store.ui.yamlDirty = false;
@@ -407,6 +549,7 @@ function wireChrome() {
     if (e.target.matches('input, textarea, select')) return;
     if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); store.undo(); }
     if (e.key === 'z' && e.shiftKey) { e.preventDefault(); store.redo(); }
+    if (e.key === 's') { e.preventDefault(); saveProject(); }
   });
 
   $('#module-search').addEventListener('input', (e) => {
@@ -426,13 +569,13 @@ function renderHistoryButtons() {
 
 function wireCanvas() {
   $('#play-name').addEventListener('change', (e) => {
-    store.commit('play', (pb) => { pb.plays[0].name = e.target.value; });
+    store.commit('play', (proj) => { proj.playbooks[0].plays[0].name = e.target.value; });
   });
   $('#play-hosts').addEventListener('change', (e) => {
-    store.commit('play', (pb) => { pb.plays[0].hosts = e.target.value; });
+    store.commit('play', (proj) => { proj.playbooks[0].plays[0].hosts = e.target.value; });
   });
   $('#play-become').addEventListener('change', (e) => {
-    store.commit('play', (pb) => { pb.plays[0].become = e.target.checked || undefined; });
+    store.commit('play', (proj) => { proj.playbooks[0].plays[0].become = e.target.checked || undefined; });
   });
 }
 

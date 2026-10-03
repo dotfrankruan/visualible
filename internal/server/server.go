@@ -13,18 +13,21 @@ import (
 	"github.com/visualible/visualible/internal/ansible"
 	"github.com/visualible/visualible/internal/ir"
 	"github.com/visualible/visualible/internal/render"
+	"github.com/visualible/visualible/internal/store"
 	webfs "github.com/visualible/visualible/internal/web"
 )
 
 // Server wires the API to domain services.
 type Server struct {
 	discovery *ansible.Discovery
+	store     *store.Store
 	mux       *http.ServeMux
 }
 
-// New builds a Server with all routes registered.
-func New(discovery *ansible.Discovery) (*Server, error) {
-	s := &Server{discovery: discovery, mux: http.NewServeMux()}
+// New builds a Server with all routes registered. store may be nil
+// (project endpoints then return 503), which keeps tests lightweight.
+func New(discovery *ansible.Discovery, st *store.Store) (*Server, error) {
+	s := &Server{discovery: discovery, store: st, mux: http.NewServeMux()}
 	s.routes()
 	return s, nil
 }
@@ -62,6 +65,12 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/modules", s.handleModuleList)
 	s.mux.HandleFunc("GET /api/modules/{fqcn}", s.handleModuleDoc)
 	s.mux.HandleFunc("POST /api/render", s.handleRender)
+
+	s.mux.HandleFunc("GET /api/projects", s.handleProjectList)
+	s.mux.HandleFunc("POST /api/projects", s.handleProjectCreate)
+	s.mux.HandleFunc("GET /api/projects/{id}", s.handleProjectGet)
+	s.mux.HandleFunc("PUT /api/projects/{id}", s.handleProjectPut)
+	s.mux.HandleFunc("DELETE /api/projects/{id}", s.handleProjectDelete)
 
 	// Embedded frontend; anything not under /api falls through to static.
 	if static, err := webfs.Static(); err == nil {

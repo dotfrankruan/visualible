@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/visualible/visualible/internal/ansible"
+	"github.com/visualible/visualible/internal/store"
 )
 
 func fixtureDiscovery(t *testing.T) *ansible.Discovery {
@@ -30,7 +31,12 @@ func fixtureDiscovery(t *testing.T) *ansible.Discovery {
 
 func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
-	srv, err := New(fixtureDiscovery(t))
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { st.Close() })
+	srv, err := New(fixtureDiscovery(t), st)
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
@@ -157,7 +163,7 @@ func TestAnsibleUnavailable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open cache: %v", err)
 	}
-	srv, err := New(ansible.NewDiscoveryWith(nil, nil, cache))
+	srv, err := New(ansible.NewDiscoveryWith(nil, nil, cache), nil)
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
