@@ -20,8 +20,61 @@
     <button id="btn-redo" class="tool" title="Redo" disabled>↷ Redo</button>
     <span></span>
     <button id="btn-deploy" class="tool" title="Open the Deployments tab">Deploy</button>
-    <button id="btn-settings" class="tool" disabled title="Settings arrive in a later phase">Settings</button>
+    <button id="btn-ai" class="tool" title="AI assistant (optional)">AI</button>
+    <button id="btn-settings" class="tool" title="Settings">Settings</button>
   </header>
+
+  <div id="settings-modal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <span>Settings</span>
+        <button id="settings-close" class="mini-btn">✕</button>
+      </div>
+      <form id="settings-form" class="modal-body">
+        <div class="props-heading">Ansible</div>
+        <label class="set-label">ansible path<input id="set-ansible-path" type="text" placeholder="(PATH lookup)"></label>
+        <label class="set-label">ansible-doc path<input id="set-ansible-doc-path" type="text" placeholder="(PATH lookup)"></label>
+        <label class="set-label">ansible-playbook path<input id="set-ansible-playbook-path" type="text" placeholder="(PATH lookup)"></label>
+        <div class="props-heading">AI provider (OpenAI-compatible)</div>
+        <label class="set-label">endpoint<input id="set-ai-endpoint" type="text" placeholder="http://localhost:11434/v1"></label>
+        <label class="set-label">model<input id="set-ai-model" type="text" placeholder="qwen2.5-coder:7b"></label>
+        <label class="set-label">API key credential<select id="set-ai-key"></select></label>
+        <div class="hint-line">API keys live in the encrypted credential store (Inventory tab); only a reference is kept here.</div>
+        <div class="props-heading">Artifact storage (S3-compatible, deferred)</div>
+        <label class="set-label">endpoint<input id="set-s3-endpoint" type="text" placeholder="https://s3.example.com"></label>
+        <label class="set-label">bucket<input id="set-s3-bucket" type="text"></label>
+        <label class="set-label">path prefix<input id="set-s3-prefix" type="text"></label>
+        <div class="modal-actions">
+          <button class="primary" type="submit">Save settings</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="ai-modal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <span>AI assistant</span>
+        <button id="ai-close" class="mini-btn">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="hint-line" style="margin-bottom:8px">
+          Describe what the playbook should do. The proposal becomes editable IR —
+          nothing is applied or deployed without your review.
+        </div>
+        <textarea id="ai-intent" placeholder="e.g. Install nginx on the web group, deploy /etc/nginx/nginx.conf from a template, and restart nginx via a handler when the config changes."></textarea>
+        <div class="modal-actions">
+          <button id="ai-generate" class="primary">Generate proposal</button>
+        </div>
+        <div id="ai-status" class="hint-line" style="margin-top:6px"></div>
+        <div id="ai-result"></div>
+        <div id="ai-actions" class="modal-actions hidden">
+          <button id="ai-apply" class="primary">Apply to editor</button>
+          <button id="ai-discard" class="mini-btn">Discard</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <div id="project-modal" class="modal hidden">
     <div class="modal-card">

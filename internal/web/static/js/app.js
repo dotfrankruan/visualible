@@ -8,6 +8,7 @@ import { el, buildOptionsForm } from './form.js';
 import { renderYaml } from './yaml.js';
 import { wireInventoryTab, renderInventory } from './inventory.js';
 import { wireDeploymentsTab, renderDeployments } from './deployments.js';
+import { wireSettingsAI } from './settings.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -20,6 +21,7 @@ async function boot() {
   wireProjectModal();
   wireInventoryTab();
   wireDeploymentsTab();
+  wireSettingsAI();
 
   store.on('editor', () => { renderCanvas(); renderProps(); renderProjectBar(); });
   store.on('history', renderHistoryButtons);

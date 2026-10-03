@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sync"
 	"time"
@@ -151,6 +152,47 @@ func NewDiscovery(ctx context.Context, cacheDir string) (*Discovery, error) {
 // NewDiscoveryWith injects dependencies for tests.
 func NewDiscoveryWith(inst *Installation, doc *DocClient, cache *Cache) *Discovery {
 	return &Discovery{inst: inst, doc: doc, cache: cache}
+}
+
+// ApplyOverrides re-detects Ansible honoring explicit path overrides from
+// settings. All-empty overrides fall back to PATH lookup. A nonexistent
+// override path marks Ansible unavailable (explicit is better than a
+// silently wrong guess).
+func (d *Discovery) ApplyOverrides(ctx context.Context, ansiblePath, docPath, playbookPath string) {
+	d.inst = nil
+	d.doc = nil
+	if ansiblePath == "" && docPath == "" && playbookPath == "" {
+		if inst, err := Detect(ctx); err == nil {
+			d.inst = inst
+			d.doc = NewDocClient(inst)
+		}
+		return
+	}
+	inst := &Installation{Path: ansiblePath, AnsibleDocPath: docPath, PlaybookPath: playbookPath}
+	if inst.Path == "" {
+		inst.Path, _ = exec.LookPath("ansible")
+	}
+	if inst.AnsibleDocPath == "" {
+		inst.AnsibleDocPath, _ = exec.LookPath("ansible-doc")
+	}
+	if inst.PlaybookPath == "" {
+		inst.PlaybookPath, _ = exec.LookPath("ansible-playbook")
+	}
+	if inst.Path == "" || inst.AnsibleDocPath == "" || inst.PlaybookPath == "" {
+		return
+	}
+	for _, p := range []string{inst.Path, inst.AnsibleDocPath, inst.PlaybookPath} {
+		if _, err := os.Stat(p); err != nil {
+			return
+		}
+	}
+	vctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	if out, err := defaultOutput(vctx, inst.Path, "--version"); err == nil {
+		inst.Version = parseVersion(string(out))
+	}
+	d.inst = inst
+	d.doc = NewDocClient(inst)
 }
 
 // Status describes Ansible availability for the UI.

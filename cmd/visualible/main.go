@@ -70,6 +70,11 @@ func main() {
 	}
 	defer st.Close()
 
+	// Apply persisted Ansible path overrides (if any) before serving.
+	if settings, err := st.GetSettings(ctx); err == nil {
+		discovery.ApplyOverrides(ctx, settings.AnsiblePath, settings.AnsibleDocPath, settings.AnsiblePlaybookPath)
+	}
+
 	backend := deploy.NewAnsibleBackend(discovery.Installation())
 	manager := deploy.NewManager(backend, st, secretResolver{st})
 

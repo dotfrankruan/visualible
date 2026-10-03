@@ -48,4 +48,10 @@ export const api = {
     request('/api/deployments', { method: 'POST', body: JSON.stringify(plan) }),
   cancelDeployment: (id) =>
     request(`/api/deployments/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
+
+  settings: () => request('/api/settings'),
+  saveSettings: (settings) =>
+    request('/api/settings', { method: 'PUT', body: JSON.stringify(settings) }),
+  aiGenerate: (intent, currentYaml) =>
+    request('/api/ai/generate', { method: 'POST', body: JSON.stringify({ intent, currentYaml }) }),
 };
