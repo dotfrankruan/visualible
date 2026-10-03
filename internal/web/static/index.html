@@ -18,8 +18,8 @@
     <button id="btn-save" class="tool" disabled title="Save project (Ctrl/Cmd+S)">Save</button>
     <button id="btn-undo" class="tool" title="Undo" disabled>↶ Undo</button>
     <button id="btn-redo" class="tool" title="Redo" disabled>↷ Redo</button>
-    <button id="btn-run" class="tool" disabled title="Deployment arrives in a later phase">Run</button>
-    <button id="btn-deploy" class="tool" disabled title="Deployment arrives in a later phase">Deploy</button>
+    <span></span>
+    <button id="btn-deploy" class="tool" title="Open the Deployments tab">Deploy</button>
     <button id="btn-settings" class="tool" disabled title="Settings arrive in a later phase">Settings</button>
   </header>
 
@@ -76,7 +76,7 @@
       <button class="tab active" data-tab="visual">Visual</button>
       <button class="tab" data-tab="yaml">YAML</button>
       <button class="tab" data-tab="inventory">Inventory</button>
-      <button class="tab" data-tab="deployments" disabled title="Later phase">Deployments</button>
+      <button class="tab" data-tab="deployments">Deployments</button>
       <button class="tab" data-tab="logs" disabled title="Later phase">Logs</button>
     </nav>
     <div id="tab-panels">
@@ -123,6 +123,36 @@
               <textarea id="cred-secret" placeholder="Secret (stored encrypted, never shown again)" required></textarea>
               <button class="primary" type="submit">Store credential</button>
             </form>
+          </section>
+        </div>
+      </div>
+      <div id="tab-deployments" class="tab-panel">
+        <div id="deploy-layout">
+          <section id="deploy-side">
+            <div class="props-heading">New deployment</div>
+            <form id="deploy-run-form">
+              <label class="deploy-opt"><input type="checkbox" id="deploy-check"> check mode (--check)</label>
+              <label class="deploy-opt"><input type="checkbox" id="deploy-diff"> diff (--diff)</label>
+              <input id="deploy-tags" type="text" placeholder="tags (comma-separated)">
+              <input id="deploy-limit" type="text" placeholder="limit (e.g. node01)">
+              <select id="deploy-verbosity">
+                <option value="0">verbosity: normal</option>
+                <option value="1">-v</option>
+                <option value="2">-vv</option>
+                <option value="3">-vvv</option>
+                <option value="4">-vvvv</option>
+              </select>
+              <button id="deploy-run-btn" class="primary" type="submit" disabled>Run ansible-playbook</button>
+              <div id="deploy-note" class="hint-line"></div>
+            </form>
+            <div class="props-heading" style="margin-top:10px">
+              History
+              <button id="deploy-refresh" class="mini-btn" style="margin-left:6px">⟳</button>
+            </div>
+            <div id="deploy-list" class="scroll"></div>
+          </section>
+          <section id="deploy-detail">
+            <div class="empty-state">Select a deployment to inspect.</div>
           </section>
         </div>
       </div>

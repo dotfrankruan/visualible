@@ -40,4 +40,12 @@ export const api = {
     request('/api/credentials', { method: 'POST', body: JSON.stringify({ name, kind, secret }) }),
   deleteCredential: (id) =>
     request(`/api/credentials/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  deployBackend: () => request('/api/deploy/backend'),
+  deployments: () => request('/api/deployments'),
+  deployment: (id) => request(`/api/deployments/${encodeURIComponent(id)}`),
+  createDeployment: (plan) =>
+    request('/api/deployments', { method: 'POST', body: JSON.stringify(plan) }),
+  cancelDeployment: (id) =>
+    request(`/api/deployments/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
 };

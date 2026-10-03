@@ -166,6 +166,16 @@ func (s *Store) ListCredentials(ctx context.Context) ([]CredentialMeta, error) {
 	return out, rows.Err()
 }
 
+// CredentialKind returns the kind of a credential without its secret.
+func (s *Store) CredentialKind(ctx context.Context, id string) (string, error) {
+	var kind string
+	err := s.db.QueryRowContext(ctx, `SELECT kind FROM credentials WHERE id = ?`, id).Scan(&kind)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", fmt.Errorf("credential %s: %w", id, ErrNotFound)
+	}
+	return kind, err
+}
+
 // CredentialSecret decrypts and returns the secret. This is for internal
 // consumers (deployment backends) only; HTTP handlers must never expose
 // the returned bytes.

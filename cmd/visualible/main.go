@@ -16,11 +16,30 @@ import (
 	"time"
 
 	"github.com/visualible/visualible/internal/ansible"
+	"github.com/visualible/visualible/internal/deploy"
 	"github.com/visualible/visualible/internal/server"
 	"github.com/visualible/visualible/internal/store"
 )
 
 var version = "0.1.0"
+
+// secretResolver adapts the credential store to the deploy.SecretResolver
+// contract, keeping secret material out of the HTTP layer entirely.
+type secretResolver struct {
+	st *store.Store
+}
+
+func (s secretResolver) ResolveSecret(ctx context.Context, credentialID string) (string, []byte, error) {
+	kind, err := s.st.CredentialKind(ctx, credentialID)
+	if err != nil {
+		return "", nil, err
+	}
+	secret, err := s.st.CredentialSecret(ctx, credentialID)
+	if err != nil {
+		return "", nil, err
+	}
+	return kind, secret, nil
+}
 
 func main() {
 	var (
@@ -51,8 +70,11 @@ func main() {
 	}
 	defer st.Close()
 
+	backend := deploy.NewAnsibleBackend(discovery.Installation())
+	manager := deploy.NewManager(backend, st, secretResolver{st})
+
 	server.Version = version
-	srv, err := server.New(discovery, st)
+	srv, err := server.New(discovery, st, manager)
 	if err != nil {
 		logger.Fatalf("server: %v", err)
 	}

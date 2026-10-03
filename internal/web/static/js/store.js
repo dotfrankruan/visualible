@@ -23,6 +23,7 @@ export const server = {
   ansibleError: null,        // structured API error when discovery unavailable
   projects: [],              // project metadata list
   credentials: [],           // credential metadata (never secrets)
+  deployBackend: null,       // backend metadata + capabilities
 };
 
 // ---------- Editor state (working IR + history) ----------

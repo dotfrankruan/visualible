@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/visualible/visualible/internal/ansible"
+	"github.com/visualible/visualible/internal/deploy"
 	"github.com/visualible/visualible/internal/ir"
 	"github.com/visualible/visualible/internal/render"
 	"github.com/visualible/visualible/internal/store"
@@ -21,13 +22,14 @@ import (
 type Server struct {
 	discovery *ansible.Discovery
 	store     *store.Store
+	manager   *deploy.Manager
 	mux       *http.ServeMux
 }
 
-// New builds a Server with all routes registered. store may be nil
-// (project endpoints then return 503), which keeps tests lightweight.
-func New(discovery *ansible.Discovery, st *store.Store) (*Server, error) {
-	s := &Server{discovery: discovery, store: st, mux: http.NewServeMux()}
+// New builds a Server with all routes registered. store and manager may
+// be nil in tests (their endpoints then return 503).
+func New(discovery *ansible.Discovery, st *store.Store, manager *deploy.Manager) (*Server, error) {
+	s := &Server{discovery: discovery, store: st, manager: manager, mux: http.NewServeMux()}
 	s.routes()
 	return s, nil
 }
@@ -76,6 +78,13 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/credentials", s.handleCredentialList)
 	s.mux.HandleFunc("POST /api/credentials", s.handleCredentialCreate)
 	s.mux.HandleFunc("DELETE /api/credentials/{id}", s.handleCredentialDelete)
+
+	s.mux.HandleFunc("GET /api/deploy/backend", s.handleBackendInfo)
+	s.mux.HandleFunc("POST /api/deployments", s.handleDeploymentCreate)
+	s.mux.HandleFunc("GET /api/deployments", s.handleDeploymentList)
+	s.mux.HandleFunc("GET /api/deployments/{id}", s.handleDeploymentGet)
+	s.mux.HandleFunc("POST /api/deployments/{id}/cancel", s.handleDeploymentCancel)
+	s.mux.HandleFunc("GET /api/deployments/{id}/events", s.handleDeploymentEvents)
 
 	// Embedded frontend; anything not under /api falls through to static.
 	if static, err := webfs.Static(); err == nil {

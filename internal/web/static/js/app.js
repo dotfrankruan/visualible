@@ -7,6 +7,7 @@ import * as store from './store.js';
 import { el, buildOptionsForm } from './form.js';
 import { renderYaml } from './yaml.js';
 import { wireInventoryTab, renderInventory } from './inventory.js';
+import { wireDeploymentsTab, renderDeployments } from './deployments.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -18,6 +19,7 @@ async function boot() {
   wireTabs();
   wireProjectModal();
   wireInventoryTab();
+  wireDeploymentsTab();
 
   store.on('editor', () => { renderCanvas(); renderProps(); renderProjectBar(); });
   store.on('history', renderHistoryButtons);
@@ -612,6 +614,9 @@ async function applyYamlEdit() {
 function wireChrome() {
   $('#btn-undo').addEventListener('click', store.undo);
   $('#btn-redo').addEventListener('click', store.redo);
+  $('#btn-deploy').addEventListener('click', () => {
+    document.querySelector('#tabs .tab[data-tab="deployments"]').click();
+  });
   document.addEventListener('keydown', (e) => {
     if (!(e.metaKey || e.ctrlKey)) return;
     if (e.target.matches('input, textarea, select')) return;
@@ -658,6 +663,7 @@ function wireTabs() {
       store.ui.tab = tab;
       if (tab === 'yaml' && store.ui.yamlDirty) renderYamlView();
       if (tab === 'inventory') renderInventory();
+      if (tab === 'deployments') renderDeployments();
     });
   }
   $('#btn-render-yaml').addEventListener('click', renderYamlView);

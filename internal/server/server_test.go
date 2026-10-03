@@ -36,7 +36,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 		t.Fatalf("open store: %v", err)
 	}
 	t.Cleanup(func() { st.Close() })
-	srv, err := New(fixtureDiscovery(t), st)
+	srv, err := New(fixtureDiscovery(t), st, nil)
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
@@ -163,7 +163,7 @@ func TestAnsibleUnavailable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open cache: %v", err)
 	}
-	srv, err := New(ansible.NewDiscoveryWith(nil, nil, cache), nil)
+	srv, err := New(ansible.NewDiscoveryWith(nil, nil, cache), nil, nil)
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
