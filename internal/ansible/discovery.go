@@ -30,10 +30,10 @@ type cachedSchema struct {
 }
 
 type cacheFile struct {
-	Version  int                        `json:"version"`
-	List     []ModuleSummary            `json:"list"`
-	ListAt   time.Time                  `json:"listAt"`
-	Schemas  map[string]*cachedSchema   `json:"schemas"`
+	Version int                      `json:"version"`
+	List    []ModuleSummary          `json:"list"`
+	ListAt  time.Time                `json:"listAt"`
+	Schemas map[string]*cachedSchema `json:"schemas"`
 }
 
 const cacheVersion = 1
@@ -155,9 +155,9 @@ func NewDiscoveryWith(inst *Installation, doc *DocClient, cache *Cache) *Discove
 
 // Status describes Ansible availability for the UI.
 type Status struct {
-	Available bool    `json:"available"`
-	Version   string  `json:"version,omitempty"`
-	Path      string  `json:"path,omitempty"`
+	Available bool   `json:"available"`
+	Version   string `json:"version,omitempty"`
+	Path      string `json:"path,omitempty"`
 }
 
 // Status reports whether Ansible was detected.
@@ -170,6 +170,11 @@ func (d *Discovery) Status() Status {
 
 // Installation returns the detected installation, or nil.
 func (d *Discovery) Installation() *Installation { return d.inst }
+
+// CachedModules returns the cached catalog without triggering discovery.
+func (d *Discovery) CachedModules() ([]ModuleSummary, bool) {
+	return d.cache.List()
+}
 
 // Modules returns the module catalog, refreshing from ansible-doc when the
 // cache is empty. Pass refresh=true to force re-discovery.

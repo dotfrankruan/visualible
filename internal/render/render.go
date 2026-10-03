@@ -31,10 +31,10 @@ type yamlPlay struct {
 //
 //   - name: Install nginx
 //     ansible.builtin.apt:
-//       name: nginx
-//       state: present
+//     name: nginx
+//     state: present
 //     notify:
-//       - Restart nginx
+//   - Restart nginx
 type yamlTask struct {
 	name   string
 	module string

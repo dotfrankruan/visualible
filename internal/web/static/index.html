@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Visualible</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header id="app-header">
+    <div class="brand">Visualible</div>
+    <div id="ansible-status" class="status-pill" title="Ansible detection status">…</div>
+    <div class="spacer"></div>
+    <button id="btn-undo" class="tool" title="Undo" disabled>↶ Undo</button>
+    <button id="btn-redo" class="tool" title="Redo" disabled>↷ Redo</button>
+    <button id="btn-run" class="tool" disabled title="Deployment arrives in a later phase">Run</button>
+    <button id="btn-deploy" class="tool" disabled title="Deployment arrives in a later phase">Deploy</button>
+    <button id="btn-settings" class="tool" disabled title="Settings arrive in a later phase">Settings</button>
+  </header>
+
+  <main id="app-main">
+    <aside id="module-panel">
+      <div class="panel-title">Modules</div>
+      <input id="module-search" type="search" placeholder="Search modules…" autocomplete="off">
+      <select id="module-collection" title="Filter by collection">
+        <option value="">All collections</option>
+      </select>
+      <div id="module-list" class="scroll"></div>
+    </aside>
+
+    <section id="canvas-panel">
+      <div class="panel-title">
+        Playbook Canvas
+        <input id="play-name" class="inline-edit" title="Play name" placeholder="Play name">
+        <span class="play-hosts-wrap">hosts: <input id="play-hosts" class="inline-edit mono" placeholder="all"></span>
+        <label class="become-wrap"><input type="checkbox" id="play-become"> become</label>
+      </div>
+      <div id="canvas" class="scroll">
+        <div class="section-label">Tasks</div>
+        <div id="task-list"></div>
+        <div class="section-label">Handlers</div>
+        <div id="handler-list"></div>
+        <div class="canvas-hint" id="canvas-hint">Select a module on the left, then “Add task”.</div>
+      </div>
+    </section>
+
+    <aside id="props-panel">
+      <div class="panel-title">Properties</div>
+      <div id="props" class="scroll">
+        <div class="empty-state">No task selected.</div>
+      </div>
+    </aside>
+  </main>
+
+  <footer id="app-footer">
+    <nav id="tabs">
+      <button class="tab active" data-tab="visual">Visual</button>
+      <button class="tab" data-tab="yaml">YAML</button>
+      <button class="tab" data-tab="inventory" disabled title="Later phase">Inventory</button>
+      <button class="tab" data-tab="deployments" disabled title="Later phase">Deployments</button>
+      <button class="tab" data-tab="logs" disabled title="Later phase">Logs</button>
+    </nav>
+    <div id="tab-panels">
+      <div id="tab-visual" class="tab-panel active">
+        <div class="hint-line">Visual editor is the canvas above. YAML view shows the rendered playbook.</div>
+      </div>
+      <div id="tab-yaml" class="tab-panel">
+        <div class="yaml-toolbar">
+          <button id="btn-render-yaml" class="tool">Render YAML</button>
+          <span id="yaml-status" class="hint-line"></span>
+        </div>
+        <pre id="yaml-view" class="mono yaml"></pre>
+      </div>
+    </div>
+  </footer>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

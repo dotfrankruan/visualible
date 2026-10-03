@@ -1,0 +1,94 @@
+{
+  "ansible.builtin.apt": {
+    "doc": {
+      "author": ["Matthew Williams (@mgwilliams)"],
+      "collection": "ansible.builtin",
+      "description": [
+        "Manages apt packages (such as for Debian/Ubuntu).",
+        "For more information, see the apt-get man page."
+      ],
+      "has_action": true,
+      "module": "apt",
+      "notes": [
+        "Three of the upgrade modes required python3-apt."
+      ],
+      "options": {
+        "allow_downgrade": {
+          "aliases": ["allow-downgrade", "allow_downgrades"],
+          "default": false,
+          "description": [
+            "Corresponds to the C(--allow-downgrades) option for I(apt)."
+          ],
+          "type": "bool",
+          "version_added": "2.12"
+        },
+        "cache_valid_time": {
+          "description": [
+            "Update the apt cache if it is older than the specified number of seconds."
+          ],
+          "type": "int"
+        },
+        "deb": {
+          "description": [
+            "Path to a .deb package on the remote machine."
+          ],
+          "type": "path"
+        },
+        "dpkg_options": {
+          "default": "force-confdef,force-confold",
+          "description": [
+            "Add dpkg options to apt command."
+          ],
+          "type": "str"
+        },
+        "force_apt_get": {
+          "default": false,
+          "description": [
+            "Force usage of apt-get instead of aptitude."
+          ],
+          "type": "bool"
+        },
+        "name": {
+          "aliases": ["pkg", "package"],
+          "description": [
+            "A list of package names, like C(foo), or package specifier with version."
+          ],
+          "elements": "str",
+          "type": "list"
+        },
+        "state": {
+          "choices": ["absent", "build-dep", "fixed", "latest", "present"],
+          "default": "present",
+          "description": [
+            "Indicates the desired package state."
+          ],
+          "type": "str"
+        },
+        "update_cache": {
+          "aliases": ["update-cache"],
+          "description": [
+            "Run the equivalent of C(apt-get update) before the operation."
+          ],
+          "type": "bool"
+        },
+        "upgrade": {
+          "choices": ["dist", "full", "no", "safe", "yes"],
+          "default": "no",
+          "description": [
+            "If yes or safe, performs an aptitude safe-upgrade."
+          ],
+          "type": "str"
+        }
+      },
+      "requirements": ["python3-apt", "aptitude"],
+      "short_description": "Manage apt-packages",
+      "version_added": "0.0.1",
+      "seealso": [
+        {"module": "ansible.builtin.apt_repository"},
+        {"module": "ansible.builtin.dnf"}
+      ]
+    },
+    "examples": "- name: Update all packages\n  ansible.builtin.apt:\n    upgrade: dist\n",
+    "return": {}
+  }
+}

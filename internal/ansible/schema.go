@@ -19,31 +19,31 @@ type ModuleSummary struct {
 // ModuleSchema is the normalized, frontend-ready description of one
 // Ansible module. It carries everything needed to build dynamic forms.
 type ModuleSchema struct {
-	FQCN             string                  `json:"fqcn"`
-	Name             string                  `json:"name"`
-	Collection       string                  `json:"collection"`
-	ShortDescription string                  `json:"shortDescription"`
-	Description      []string                `json:"description,omitempty"`
-	VersionAdded     string                  `json:"versionAdded,omitempty"`
-	Requirements     []string                `json:"requirements,omitempty"`
-	Notes            []string                `json:"notes,omitempty"`
-	SeeAlso          []string                `json:"seeAlso,omitempty"`
+	FQCN             string                   `json:"fqcn"`
+	Name             string                   `json:"name"`
+	Collection       string                   `json:"collection"`
+	ShortDescription string                   `json:"shortDescription"`
+	Description      []string                 `json:"description,omitempty"`
+	VersionAdded     string                   `json:"versionAdded,omitempty"`
+	Requirements     []string                 `json:"requirements,omitempty"`
+	Notes            []string                 `json:"notes,omitempty"`
+	SeeAlso          []string                 `json:"seeAlso,omitempty"`
 	Options          map[string]*OptionSchema `json:"options,omitempty"`
-	Examples         string                  `json:"examples,omitempty"`
+	Examples         string                   `json:"examples,omitempty"`
 }
 
 // OptionSchema describes one module argument, recursively via Suboptions.
 type OptionSchema struct {
-	Name         string                  `json:"name"`
-	Type         string                  `json:"type"` // str, int, float, bool, list, dict, path, raw, ...
-	Description  []string                `json:"description,omitempty"`
-	Required     bool                    `json:"required,omitempty"`
-	Default      any                     `json:"default,omitempty"`
-	Choices      []any                   `json:"choices,omitempty"`
-	Aliases      []string                `json:"aliases,omitempty"`
-	Elements     string                  `json:"elements,omitempty"` // element type for lists
+	Name         string                   `json:"name"`
+	Type         string                   `json:"type"` // str, int, float, bool, list, dict, path, raw, ...
+	Description  []string                 `json:"description,omitempty"`
+	Required     bool                     `json:"required,omitempty"`
+	Default      any                      `json:"default,omitempty"`
+	Choices      []any                    `json:"choices,omitempty"`
+	Aliases      []string                 `json:"aliases,omitempty"`
+	Elements     string                   `json:"elements,omitempty"` // element type for lists
 	Suboptions   map[string]*OptionSchema `json:"suboptions,omitempty"`
-	VersionAdded string                  `json:"versionAdded,omitempty"`
+	VersionAdded string                   `json:"versionAdded,omitempty"`
 }
 
 // --- Raw ansible-doc JSON shapes (parsed defensively) ---

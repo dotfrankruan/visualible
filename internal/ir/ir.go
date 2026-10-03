@@ -29,17 +29,17 @@ type Playbook struct {
 
 // Play maps to an Ansible play.
 type Play struct {
-	ID        string            `json:"id"`
-	Name      string            `json:"name"`
-	Hosts     string            `json:"hosts"`
-	Become    bool              `json:"become,omitempty"`
-	Vars      map[string]any    `json:"vars,omitempty"`
-	Roles     []RoleReference   `json:"roles,omitempty"`
-	PreTasks  []*Task           `json:"preTasks,omitempty"`
-	Tasks     []*Task           `json:"tasks"`
-	PostTasks []*Task           `json:"postTasks,omitempty"`
-	Handlers  []*Task           `json:"handlers,omitempty"`
-	Tags      []string          `json:"tags,omitempty"`
+	ID        string          `json:"id"`
+	Name      string          `json:"name"`
+	Hosts     string          `json:"hosts"`
+	Become    bool            `json:"become,omitempty"`
+	Vars      map[string]any  `json:"vars,omitempty"`
+	Roles     []RoleReference `json:"roles,omitempty"`
+	PreTasks  []*Task         `json:"preTasks,omitempty"`
+	Tasks     []*Task         `json:"tasks"`
+	PostTasks []*Task         `json:"postTasks,omitempty"`
+	Handlers  []*Task         `json:"handlers,omitempty"`
+	Tags      []string        `json:"tags,omitempty"`
 }
 
 // RoleReference is a reference to an Ansible role. Roles themselves are
@@ -55,34 +55,34 @@ type RoleReference struct {
 // part of the model so imported content and future renderers have a place
 // to live without schema changes.
 type Task struct {
-	ID       string         `json:"id"`
-	Name     string         `json:"name"`
-	Module   string         `json:"module"` // FQCN, e.g. ansible.builtin.apt
-	Args     map[string]any `json:"args,omitempty"`
+	ID     string         `json:"id"`
+	Name   string         `json:"name"`
+	Module string         `json:"module"` // FQCN, e.g. ansible.builtin.apt
+	Args   map[string]any `json:"args,omitempty"`
 
-	When        string   `json:"when,omitempty"`
-	Loop        any      `json:"loop,omitempty"`
-	Register    string   `json:"register,omitempty"`
-	Notify      []string `json:"notify,omitempty"`
-	Tags        []string `json:"tags,omitempty"`
-	Become      *bool    `json:"become,omitempty"`
-	DelegateTo  string   `json:"delegateTo,omitempty"`
-	RunOnce     bool     `json:"runOnce,omitempty"`
+	When        string            `json:"when,omitempty"`
+	Loop        any               `json:"loop,omitempty"`
+	Register    string            `json:"register,omitempty"`
+	Notify      []string          `json:"notify,omitempty"`
+	Tags        []string          `json:"tags,omitempty"`
+	Become      *bool             `json:"become,omitempty"`
+	DelegateTo  string            `json:"delegateTo,omitempty"`
+	RunOnce     bool              `json:"runOnce,omitempty"`
 	Environment map[string]string `json:"environment,omitempty"`
-	ChangedWhen string   `json:"changedWhen,omitempty"`
-	FailedWhen  string   `json:"failedWhen,omitempty"`
+	ChangedWhen string            `json:"changedWhen,omitempty"`
+	FailedWhen  string            `json:"failedWhen,omitempty"`
 
 	// Reserved for future phases. Not rendered or editable in v0.1, but
 	// carried so parsing/validation can detect and report them rather than
 	// silently dropping data.
-	Block       []*Task `json:"block,omitempty"`
-	Rescue      []*Task `json:"rescue,omitempty"`
-	Always      []*Task `json:"always,omitempty"`
-	IncludeTasks string `json:"includeTasks,omitempty"`
-	ImportTasks  string `json:"importTasks,omitempty"`
-	Until       string `json:"until,omitempty"`
-	Retries     *int   `json:"retries,omitempty"`
-	Delay       *int   `json:"delay,omitempty"`
+	Block        []*Task `json:"block,omitempty"`
+	Rescue       []*Task `json:"rescue,omitempty"`
+	Always       []*Task `json:"always,omitempty"`
+	IncludeTasks string  `json:"includeTasks,omitempty"`
+	ImportTasks  string  `json:"importTasks,omitempty"`
+	Until        string  `json:"until,omitempty"`
+	Retries      *int    `json:"retries,omitempty"`
+	Delay        *int    `json:"delay,omitempty"`
 }
 
 // Inventory is a named set of groups and hosts.
@@ -146,12 +146,12 @@ type DeploymentPlan struct {
 
 // Deployment records one execution (or attempted execution) of a plan.
 type Deployment struct {
-	ID         string            `json:"id"`
-	Plan       *DeploymentPlan   `json:"plan"`
-	Status     DeploymentStatus  `json:"status"`
-	StartedAt  time.Time         `json:"startedAt"`
-	FinishedAt *time.Time        `json:"finishedAt,omitempty"`
-	ExitCode   *int              `json:"exitCode,omitempty"`
+	ID         string           `json:"id"`
+	Plan       *DeploymentPlan  `json:"plan"`
+	Status     DeploymentStatus `json:"status"`
+	StartedAt  time.Time        `json:"startedAt"`
+	FinishedAt *time.Time       `json:"finishedAt,omitempty"`
+	ExitCode   *int             `json:"exitCode,omitempty"`
 }
 
 type DeploymentStatus string

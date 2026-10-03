@@ -149,8 +149,8 @@ func TestValidateFQCN(t *testing.T) {
 func TestParseVersion(t *testing.T) {
 	cases := map[string]string{
 		"ansible [core 2.16.3]\n  config file = /etc/ansible.cfg": "2.16.3",
-		"ansible [core 2.15.12]":                                   "2.15.12",
-		"garbage":                                                  "",
+		"ansible [core 2.15.12]":                                  "2.15.12",
+		"garbage":                                                 "",
 	}
 	for in, want := range cases {
 		if got := parseVersion(in); got != want {
