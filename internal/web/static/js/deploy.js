@@ -28,9 +28,12 @@ export async function renderDeploy() {
   renderPreflight();
 }
 
+let preflight = null;      // last connection-check result
+let preflightRunning = false;
+
 // ---------- Preflight (honest, no invented numbers) ----------
 
-async function renderPreflight() {
+function renderPreflight() {
   const wrap = $('#deploy-preflight');
   wrap.replaceChildren();
   const proj = store.editor.project;
@@ -38,12 +41,64 @@ async function renderPreflight() {
   const hosts = inv ? countHosts(inv) : 0;
   const tasks = store.currentPlay()?.tasks ?? [];
 
-  wrap.append(
-    preflightRow(hosts > 0, 'Targets', hosts ? `${hosts} machine(s)` : 'none yet — add machines on the Targets page'),
-    preflightRow(tasks.length > 0, 'Automation', tasks.length ? `${tasks.length} step(s)` : 'nothing to do yet — add steps on the Build page'),
-    preflightRow(store.server.health?.ansible?.available, 'Ansible',
-      store.server.health?.ansible?.available ? 'ready' : 'not detected'),
-  );
+  wrap.append(preflightRow(hosts > 0, 'Targets',
+    hosts ? `${hosts} machine(s)` : 'none yet — add machines on the Targets page'));
+  wrap.append(preflightRow(tasks.length > 0, 'Automation',
+    tasks.length ? `${tasks.length} step(s)` : 'nothing to do yet — add steps on the Build page'));
+  wrap.append(preflightRow(store.server.health?.ansible?.available, 'Ansible',
+    store.server.health?.ansible?.available ? 'ready' : 'not detected'));
+
+  // Readiness estimate: steps x machines that will actually be contacted.
+  const reachable = preflight ? preflight.reachable : hosts;
+  if (tasks.length && reachable > 0) {
+    wrap.append(preflightRow(true, 'Estimated work',
+      `about ${tasks.length * reachable} task execution(s) on ${reachable} machine(s)`));
+  }
+
+  // Connection check (real Ansible ping, only for saved projects).
+  const checkBtn = el('button', { class: 'mini-btn' },
+    preflightRunning ? 'Checking connections…' : 'Test connections');
+  checkBtn.disabled = preflightRunning || !hosts || !store.server.health?.ansible?.available;
+  checkBtn.addEventListener('click', runPreflight);
+  wrap.append(el('div', { style: 'margin-top:6px' }, checkBtn));
+
+  if (preflight) {
+    for (const h of preflight.hosts) {
+      wrap.append(el('div', { class: `preflight-row ${h.ok ? 'ok' : 'err'}` },
+        el('span', { class: 'icon' }, h.ok ? '✓' : '✗'),
+        el('span', {}, h.name),
+        el('span', { class: 'detail', title: h.ok ? '' : h.message },
+          h.ok ? (h.address || '') : h.message)));
+    }
+    if (preflight.total > 0) {
+      const allOK = preflight.reachable === preflight.total;
+      wrap.append(el('div', { class: allOK ? 'review-ok' : 'review-warning' },
+        allOK
+          ? `✓ ${preflight.reachable}/${preflight.total} machines reachable`
+          : `${preflight.reachable}/${preflight.total} machines reachable — unreachable machines will fail during deployment.`));
+    }
+  }
+}
+
+async function runPreflight() {
+  const proj = store.editor.project;
+  const inv = proj?.inventories?.[0];
+  if (!proj || !inv) return;
+  if (store.editor.dirty) {
+    alert('Save the project first (Ctrl/Cmd+S), then test connections.');
+    return;
+  }
+  preflightRunning = true;
+  renderPreflight();
+  try {
+    preflight = await api.preflight(proj.id, inv.id);
+  } catch (e) {
+    alert(`Connection check failed: ${e.message}`);
+    preflight = null;
+  } finally {
+    preflightRunning = false;
+    renderPreflight();
+  }
 }
 
 function preflightRow(ok, label, detail) {

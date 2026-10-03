@@ -26,8 +26,24 @@ export function wireReview() {
   $('#btn-download-yaml').addEventListener('click', downloadYaml);
 }
 
-export function renderReview() {
+export async function renderReview() {
+  await refreshRecognitions();
   renderSummary();
+}
+
+// Review shows the same curated labels as the canvas: recognitions come
+// from the backend so Simple and Advanced views never disagree.
+async function refreshRecognitions() {
+  const play = store.currentPlay();
+  if (!play) return;
+  const all = [...(play.tasks ?? []), ...(play.handlers ?? [])];
+  if (!all.length) return;
+  try {
+    const { recognitions } = await api.actionsRecognize(all);
+    const map = new Map();
+    for (const r of recognitions ?? []) map.set(r.taskId, r);
+    store.server.recognitions = map;
+  } catch { /* keep the current map */ }
 }
 
 // ---------- Human-readable summary ----------
@@ -57,6 +73,13 @@ function renderSummary() {
     targetsBlock.append(el('div', {},
       el('span', { class: 'review-num' }, String(hostCount)),
       el('span', { class: 'review-unit' }, `machine(s) — ${groupBits.join(', ')}`)));
+
+    // Concrete machine names, so the review is about real infrastructure.
+    const hosts = collectHosts(inv);
+    const shown = hosts.slice(0, 8).map((h) => h.address || h.name);
+    const more = hosts.length > shown.length ? ` and ${hosts.length - shown.length} more` : '';
+    targetsBlock.append(el('div', { class: 'hint-line' }, shown.join(', ') + more));
+
     if (play.hosts && play.hosts !== 'all') {
       targetsBlock.append(el('div', { class: 'hint-line' }, `Automation runs only on group “${play.hosts}”.`));
     }
@@ -115,6 +138,44 @@ function renderSummary() {
     for (const w of warnings) warnBlock.append(el('div', { class: 'review-warning' }, w));
   }
   main.append(warnBlock);
+
+  // --- Advanced details (optional, for Ansible users) ---
+  const advBtn = el('button', { class: 'mini-btn' }, '▸ View advanced details (modules and arguments)');
+  const advWrap = el('div', { class: 'hidden' });
+  advBtn.addEventListener('click', () => {
+    const open = advWrap.classList.toggle('hidden');
+    advBtn.textContent = (open ? '▸' : '▾') + ' View advanced details (modules and arguments)';
+    if (!open) renderAdvancedDetails(advWrap, play);
+  });
+  main.append(el('div', { class: 'review-block' }, advBtn, advWrap));
+}
+
+function renderAdvancedDetails(wrap, play) {
+  wrap.replaceChildren();
+  const recog = store.server.recognitions ?? new Map();
+  const rows = [...(play.tasks ?? []).map((t) => ({ t, kind: 'step' })),
+    ...(play.handlers ?? []).map((t) => ({ t, kind: 'handler' }))];
+  for (const { t, kind } of rows) {
+    const rec = recog.get(t.id);
+    const details = el('div', { class: 'ansible-details' });
+    details.append(el('div', { class: 'kv' },
+      el('span', { class: 'k' }, kind),
+      el('span', { class: 'v' }, rec?.recognized ? `${rec.label} (${t.module})` : t.module)));
+    for (const [k, v] of Object.entries(t.args ?? {})) {
+      details.append(el('div', { class: 'kv' },
+        el('span', { class: 'k' }, k),
+        el('span', { class: 'v' }, typeof v === 'object' ? JSON.stringify(v) : String(v))));
+    }
+    for (const [k, v] of Object.entries({
+      when: t.when, register: t.register, become: t.become,
+      notify: t.notify?.join(', '), tags: t.tags?.join(', '),
+    })) {
+      if (v === undefined || v === null || v === false || v === '') continue;
+      details.append(el('div', { class: 'kv' },
+        el('span', { class: 'k' }, k), el('span', { class: 'v' }, String(v))));
+    }
+    wrap.append(details);
+  }
 }
 
 function countHosts(inv) {
@@ -131,6 +192,25 @@ function computeWarnings(play, inv, hostCount) {
   const warnings = [];
   if (hostCount === 0) {
     warnings.push('No target machines — deployment would do nothing.');
+  }
+  // Steps that cannot be shown as a simple automation stay Advanced; say
+  // so rather than letting the user wonder why a card looks technical.
+  const recog = store.server.recognitions ?? new Map();
+  const advanced = [...(play.tasks ?? []), ...(play.handlers ?? [])]
+    .filter((t) => recog.size > 0 && !recog.get(t.id)?.recognized);
+  if (advanced.length) {
+    warnings.push(`${advanced.length} step(s) use advanced Ansible settings and are shown as technical tasks: ` +
+      advanced.slice(0, 3).map((t) => `“${t.name}”`).join(', ') +
+      (advanced.length > 3 ? ` and ${advanced.length - 3} more` : '') + '.');
+  }
+  // Actions whose collection is missing would fail at deploy time.
+  const missing = (store.server.actions ?? []).filter((a) => a.available === false);
+  if (missing.length) {
+    const usedMissing = [...(play.tasks ?? [])].some((t) =>
+      missing.some((a) => t.module.startsWith(a.requiresCollection + '.')));
+    if (usedMissing) {
+      warnings.push('Some steps need Ansible collections that are not installed on this machine.');
+    }
   }
   const tasks = [...(play.tasks ?? []), ...(play.handlers ?? [])];
   for (const t of tasks) {
