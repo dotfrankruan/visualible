@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/visualible/visualible/internal/ir"
+	"github.com/dotfrankruan/visualible/internal/ir"
 )
 
 func demoPlaybook() *ir.Playbook {

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/visualible/visualible/internal/store"
+	"github.com/dotfrankruan/visualible/internal/store"
 )
 
 // --- Credentials API ---

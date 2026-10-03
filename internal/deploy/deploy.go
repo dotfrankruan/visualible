@@ -8,7 +8,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/visualible/visualible/internal/ir"
+	"github.com/dotfrankruan/visualible/internal/ir"
 )
 
 // Capabilities describe what a backend can do so the UI can adapt.

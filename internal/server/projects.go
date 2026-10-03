@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/visualible/visualible/internal/ir"
-	"github.com/visualible/visualible/internal/store"
+	"github.com/dotfrankruan/visualible/internal/ir"
+	"github.com/dotfrankruan/visualible/internal/store"
 )
 
 // --- Projects API ---

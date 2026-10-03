@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/visualible/visualible/internal/parse"
+	"github.com/dotfrankruan/visualible/internal/parse"
 )
 
 const generateSystemPrompt = `You generate Ansible playbooks for the Visualible IDE.

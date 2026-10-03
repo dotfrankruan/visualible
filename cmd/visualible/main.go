@@ -15,10 +15,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/visualible/visualible/internal/ansible"
-	"github.com/visualible/visualible/internal/deploy"
-	"github.com/visualible/visualible/internal/server"
-	"github.com/visualible/visualible/internal/store"
+	"github.com/dotfrankruan/visualible/internal/ansible"
+	"github.com/dotfrankruan/visualible/internal/deploy"
+	"github.com/dotfrankruan/visualible/internal/server"
+	"github.com/dotfrankruan/visualible/internal/store"
 )
 
 var version = "0.1.0"

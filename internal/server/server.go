@@ -10,12 +10,12 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/visualible/visualible/internal/ansible"
-	"github.com/visualible/visualible/internal/deploy"
-	"github.com/visualible/visualible/internal/ir"
-	"github.com/visualible/visualible/internal/render"
-	"github.com/visualible/visualible/internal/store"
-	webfs "github.com/visualible/visualible/internal/web"
+	"github.com/dotfrankruan/visualible/internal/ansible"
+	"github.com/dotfrankruan/visualible/internal/deploy"
+	"github.com/dotfrankruan/visualible/internal/ir"
+	"github.com/dotfrankruan/visualible/internal/render"
+	"github.com/dotfrankruan/visualible/internal/store"
+	webfs "github.com/dotfrankruan/visualible/internal/web"
 )
 
 // Server wires the API to domain services.

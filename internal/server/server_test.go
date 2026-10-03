@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/visualible/visualible/internal/ansible"
-	"github.com/visualible/visualible/internal/store"
+	"github.com/dotfrankruan/visualible/internal/ansible"
+	"github.com/dotfrankruan/visualible/internal/store"
 )
 
 func fixtureDiscovery(t *testing.T) *ansible.Discovery {

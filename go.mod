@@ -1,4 +1,4 @@
-module github.com/visualible/visualible
+module github.com/dotfrankruan/visualible
 
 go 1.27.1
 

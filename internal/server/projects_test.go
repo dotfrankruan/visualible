@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/visualible/visualible/internal/ir"
+	"github.com/dotfrankruan/visualible/internal/ir"
 )
 
 func TestProjectLifecycle(t *testing.T) {

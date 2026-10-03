@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/visualible/visualible/internal/deploy"
-	"github.com/visualible/visualible/internal/ir"
-	"github.com/visualible/visualible/internal/store"
+	"github.com/dotfrankruan/visualible/internal/deploy"
+	"github.com/dotfrankruan/visualible/internal/ir"
+	"github.com/dotfrankruan/visualible/internal/store"
 )
 
 // --- Deployments API ---

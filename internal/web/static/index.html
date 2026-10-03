@@ -9,20 +9,221 @@
 <body>
   <header id="app-header">
     <div class="brand">Visualible</div>
-    <div id="ansible-status" class="status-pill" title="Ansible detection status">…</div>
-    <div class="spacer"></div>
-    <button id="btn-projects" class="tool" title="Open / create projects">Projects</button>
-    <span id="project-bar">
+    <span id="project-bar" title="Current project">
       <span id="project-name">—</span><span id="project-dirty" class="dirty-dot" title="Unsaved changes">●</span>
     </span>
+
+    <nav id="stage-nav" aria-label="Workflow stages">
+      <button class="stage-btn active" data-stage="build">Build</button>
+      <button class="stage-btn" data-stage="targets">Targets</button>
+      <button class="stage-btn" data-stage="review">Review</button>
+      <button class="stage-btn" data-stage="deploy">Deploy</button>
+    </nav>
+
+    <div class="spacer"></div>
+
+    <button id="ansible-status" class="status-pill" title="Ansible status — click for details">…</button>
     <button id="btn-save" class="tool" disabled title="Save project (Ctrl/Cmd+S)">Save</button>
-    <button id="btn-undo" class="tool" title="Undo" disabled>↶ Undo</button>
-    <button id="btn-redo" class="tool" title="Redo" disabled>↷ Redo</button>
-    <span></span>
-    <button id="btn-deploy" class="tool" title="Open the Deployments tab">Deploy</button>
-    <button id="btn-ai" class="tool" title="AI assistant (optional)">AI</button>
+    <button id="btn-undo" class="tool" title="Undo (Ctrl/Cmd+Z)" disabled>↶</button>
+    <button id="btn-redo" class="tool" title="Redo (Ctrl/Cmd+Shift+Z)" disabled>↷</button>
+    <button id="btn-ai" class="tool" title="Describe what you want to automate">✨ Ask AI</button>
+    <button id="btn-projects" class="tool" title="Open / create projects">Projects</button>
     <button id="btn-settings" class="tool" title="Settings">Settings</button>
   </header>
+
+  <div id="ansible-popover" class="popover hidden"></div>
+
+  <!-- ============================== BUILD ============================== -->
+  <main id="stage-build" class="stage active">
+    <aside id="palette-panel">
+      <div class="panel-title">Add automation</div>
+      <div id="palette-common"></div>
+      <div class="panel-title advanced-title" id="palette-advanced-toggle">
+        <span class="expander-arrow">▸</span> Browse all Ansible modules
+      </div>
+      <div id="palette-advanced" class="hidden">
+        <input id="module-search" type="search" placeholder="Search modules…" autocomplete="off">
+        <select id="module-collection" title="Filter by collection">
+          <option value="">All collections</option>
+        </select>
+        <div id="module-list" class="scroll"></div>
+        <div id="module-actions-bar" class="module-actions"></div>
+      </div>
+    </aside>
+
+    <section id="canvas-panel">
+      <div id="canvas-empty" class="hidden">
+        <div class="empty-hero">
+          <h2>Create your first automation</h2>
+          <p class="empty-sub">What should these machines do?</p>
+          <div id="empty-ai" class="empty-ai hidden">
+            <textarea id="empty-ai-intent" placeholder="Install nginx and make sure it starts automatically."></textarea>
+            <button id="empty-ai-generate" class="primary">Generate ✨</button>
+          </div>
+          <div class="empty-or">or start manually</div>
+          <div id="empty-actions" class="empty-actions"></div>
+          <div class="empty-import">
+            <button id="empty-import-yaml" class="mini-btn">Import existing Ansible YAML</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="canvas-wrap">
+        <div class="panel-title canvas-title">
+          <input id="play-name" class="inline-edit" title="What is this automation for?" placeholder="Automation name">
+          <span class="play-hosts-wrap">runs on
+            <select id="play-hosts" class="inline-edit mono"></select>
+          </span>
+          <label class="become-wrap" title="Run steps with administrator (sudo) privileges">
+            <input type="checkbox" id="play-become"> administrator privileges
+          </label>
+        </div>
+        <div id="canvas" class="scroll">
+          <div class="section-label">Steps</div>
+          <div id="task-list"></div>
+          <div id="handlers-section" class="hidden">
+            <div class="section-label">When something changes</div>
+            <div id="handler-list"></div>
+          </div>
+          <div id="canvas-hint" class="canvas-hint hidden">Pick an automation on the left to add it here.</div>
+        </div>
+      </div>
+    </section>
+
+    <aside id="props-panel">
+      <div class="panel-title">Details</div>
+      <div id="props" class="scroll">
+        <div class="empty-state">Select a step to see its details.</div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- ============================= TARGETS ============================= -->
+  <main id="stage-targets" class="stage">
+    <div id="targets-layout">
+      <section id="targets-main">
+        <div class="stage-head">
+          <h2>Targets</h2>
+          <p class="stage-sub">The machines your automation runs on.</p>
+        </div>
+        <div class="inv-toolbar">
+          <button id="inv-add-group" class="mini-btn">+ Add group</button>
+          <button id="inv-add-ungrouped" class="mini-btn">+ Add machine</button>
+        </div>
+        <div id="inv-groups" class="scroll"></div>
+        <div class="advanced-block">
+          <button id="targets-advanced-toggle" class="mini-btn">
+            <span class="expander-arrow">▸</span> View Ansible inventory
+          </button>
+          <pre id="targets-inventory-yaml" class="mono yaml hidden"></pre>
+        </div>
+      </section>
+      <aside id="targets-side">
+        <div class="props-heading">Credentials</div>
+        <div class="hint-line" style="margin-bottom:6px">
+          SSH keys and passwords are write-only, encrypted at rest, and never placed in exported files.
+        </div>
+        <div id="cred-list" class="scroll"></div>
+        <form id="cred-add-form">
+          <input id="cred-name" type="text" placeholder="Name" required>
+          <select id="cred-kind">
+            <option value="ssh_key">ssh_key</option>
+            <option value="ssh_password">ssh_password</option>
+            <option value="become_password">become_password</option>
+            <option value="api_key">api_key</option>
+            <option value="s3">s3</option>
+          </select>
+          <textarea id="cred-secret" placeholder="Secret (stored encrypted, never shown again)" required></textarea>
+          <button class="primary" type="submit">Store credential</button>
+        </form>
+      </aside>
+    </div>
+  </main>
+
+  <!-- ============================= REVIEW ============================== -->
+  <main id="stage-review" class="stage">
+    <div id="review-layout">
+      <section id="review-main" class="scroll"></section>
+      <aside id="review-side">
+        <div class="review-actions">
+          <button id="review-deploy-btn" class="primary big">Deploy →</button>
+        </div>
+        <div class="advanced-block">
+          <button id="review-yaml-toggle" class="mini-btn">
+            <span class="expander-arrow">▸</span> View Ansible YAML
+          </button>
+          <div id="review-yaml-wrap" class="hidden">
+            <div class="yaml-toolbar">
+              <button id="btn-render-yaml" class="mini-btn">Refresh</button>
+              <button id="btn-edit-yaml" class="mini-btn">Edit</button>
+              <button id="btn-download-yaml" class="mini-btn">Download</button>
+              <button id="btn-apply-yaml" class="mini-btn hidden">Apply</button>
+              <button id="btn-cancel-yaml" class="mini-btn hidden">Cancel</button>
+            </div>
+            <div id="yaml-diagnostics"></div>
+            <pre id="yaml-view" class="mono yaml scroll"></pre>
+            <textarea id="yaml-editor" class="mono hidden" spellcheck="false"></textarea>
+            <div id="yaml-status" class="hint-line"></div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <!-- ============================= DEPLOY ============================== -->
+  <main id="stage-deploy" class="stage">
+    <div id="deploy-layout">
+      <section id="deploy-side">
+        <div class="props-heading">Ready to deploy</div>
+        <div id="deploy-preflight"></div>
+        <form id="deploy-run-form">
+          <label class="deploy-opt"><input type="checkbox" id="deploy-check"> Check first (dry run, no changes)</label>
+          <label class="deploy-opt"><input type="checkbox" id="deploy-diff"> Show what would change</label>
+          <div class="advanced-block">
+            <button id="deploy-advanced-toggle" class="mini-btn" type="button">
+              <span class="expander-arrow">▸</span> Ansible options
+            </button>
+            <div id="deploy-advanced" class="hidden">
+              <input id="deploy-tags" type="text" placeholder="tags (comma-separated)">
+              <input id="deploy-limit" type="text" placeholder="limit (e.g. web01)">
+              <select id="deploy-verbosity">
+                <option value="0">verbosity: normal</option>
+                <option value="1">-v</option>
+                <option value="2">-vv</option>
+                <option value="3">-vvv</option>
+                <option value="4">-vvvv</option>
+              </select>
+            </div>
+          </div>
+          <button id="deploy-run-btn" class="primary big" type="submit" disabled>Deploy now</button>
+          <div id="deploy-note" class="hint-line"></div>
+        </form>
+        <div class="props-heading" style="margin-top:10px">
+          Previous deployments
+          <button id="deploy-refresh" class="mini-btn" style="margin-left:6px">⟳</button>
+        </div>
+        <div id="deploy-list" class="scroll"></div>
+      </section>
+      <section id="deploy-detail">
+        <div class="empty-state">Deploy or select a previous deployment to see progress.</div>
+      </section>
+    </div>
+  </main>
+
+  <!-- ============================= MODALS ============================== -->
+  <div id="project-modal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <span>Projects</span>
+        <button id="project-modal-close" class="mini-btn">✕</button>
+      </div>
+      <div id="project-list" class="scroll"></div>
+      <form id="project-new-form">
+        <input id="project-new-name" type="text" placeholder="New project name" required>
+        <button class="primary" type="submit">Create</button>
+      </form>
+    </div>
+  </div>
 
   <div id="settings-modal" class="modal hidden">
     <div class="modal-card">
@@ -39,7 +240,7 @@
         <label class="set-label">endpoint<input id="set-ai-endpoint" type="text" placeholder="http://localhost:11434/v1"></label>
         <label class="set-label">model<input id="set-ai-model" type="text" placeholder="qwen2.5-coder:7b"></label>
         <label class="set-label">API key credential<select id="set-ai-key"></select></label>
-        <div class="hint-line">API keys live in the encrypted credential store (Inventory tab); only a reference is kept here.</div>
+        <div class="hint-line">API keys live in the encrypted credential store (Targets page); only a reference is kept here.</div>
         <div class="props-heading">Artifact storage (S3-compatible, deferred)</div>
         <label class="set-label">endpoint<input id="set-s3-endpoint" type="text" placeholder="https://s3.example.com"></label>
         <label class="set-label">bucket<input id="set-s3-bucket" type="text"></label>
@@ -52,166 +253,25 @@
   </div>
 
   <div id="ai-modal" class="modal hidden">
-    <div class="modal-card">
+    <div class="modal-card wide">
       <div class="modal-header">
-        <span>AI assistant</span>
+        <span>✨ What do you want these machines to do?</span>
         <button id="ai-close" class="mini-btn">✕</button>
       </div>
       <div class="modal-body">
-        <div class="hint-line" style="margin-bottom:8px">
-          Describe what the playbook should do. The proposal becomes editable IR —
-          nothing is applied or deployed without your review.
-        </div>
-        <textarea id="ai-intent" placeholder="e.g. Install nginx on the web group, deploy /etc/nginx/nginx.conf from a template, and restart nginx via a handler when the config changes."></textarea>
+        <textarea id="ai-intent" placeholder="Install Docker on my Debian servers, create user frank, and make sure nginx starts after reboot."></textarea>
         <div class="modal-actions">
-          <button id="ai-generate" class="primary">Generate proposal</button>
+          <button id="ai-generate" class="primary">Generate proposal ✨</button>
         </div>
         <div id="ai-status" class="hint-line" style="margin-top:6px"></div>
         <div id="ai-result"></div>
         <div id="ai-actions" class="modal-actions hidden">
-          <button id="ai-apply" class="primary">Apply to editor</button>
+          <button id="ai-apply" class="primary">Apply to project</button>
           <button id="ai-discard" class="mini-btn">Discard</button>
         </div>
       </div>
     </div>
   </div>
-
-  <div id="project-modal" class="modal hidden">
-    <div class="modal-card">
-      <div class="modal-header">
-        <span>Projects</span>
-        <button id="project-modal-close" class="mini-btn">✕</button>
-      </div>
-      <div id="project-list" class="scroll"></div>
-      <form id="project-new-form">
-        <input id="project-new-name" type="text" placeholder="New project name" required>
-        <button class="primary" type="submit">Create</button>
-      </form>
-    </div>
-  </div>
-
-  <main id="app-main">
-    <aside id="module-panel">
-      <div class="panel-title">Modules</div>
-      <input id="module-search" type="search" placeholder="Search modules…" autocomplete="off">
-      <select id="module-collection" title="Filter by collection">
-        <option value="">All collections</option>
-      </select>
-      <div id="module-list" class="scroll"></div>
-    </aside>
-
-    <section id="canvas-panel">
-      <div class="panel-title">
-        Playbook Canvas
-        <input id="play-name" class="inline-edit" title="Play name" placeholder="Play name">
-        <span class="play-hosts-wrap">hosts: <input id="play-hosts" class="inline-edit mono" placeholder="all"></span>
-        <label class="become-wrap"><input type="checkbox" id="play-become"> become</label>
-      </div>
-      <div id="canvas" class="scroll">
-        <div class="section-label">Tasks</div>
-        <div id="task-list"></div>
-        <div class="section-label">Handlers</div>
-        <div id="handler-list"></div>
-        <div class="canvas-hint" id="canvas-hint">Select a module on the left, then “Add task”.</div>
-      </div>
-    </section>
-
-    <aside id="props-panel">
-      <div class="panel-title">Properties</div>
-      <div id="props" class="scroll">
-        <div class="empty-state">No task selected.</div>
-      </div>
-    </aside>
-  </main>
-
-  <footer id="app-footer">
-    <nav id="tabs">
-      <button class="tab active" data-tab="visual">Visual</button>
-      <button class="tab" data-tab="yaml">YAML</button>
-      <button class="tab" data-tab="inventory">Inventory</button>
-      <button class="tab" data-tab="deployments">Deployments</button>
-      <button class="tab" data-tab="logs" disabled title="Later phase">Logs</button>
-    </nav>
-    <div id="tab-panels">
-      <div id="tab-visual" class="tab-panel active">
-        <div class="hint-line">Visual editor is the canvas above. YAML view shows the rendered playbook.</div>
-      </div>
-      <div id="tab-yaml" class="tab-panel">
-        <div class="yaml-toolbar">
-          <button id="btn-render-yaml" class="tool">Render YAML</button>
-          <button id="btn-edit-yaml" class="tool">Edit</button>
-          <button id="btn-download-yaml" class="tool">Download</button>
-          <button id="btn-apply-yaml" class="tool hidden">Apply to editor</button>
-          <button id="btn-cancel-yaml" class="tool hidden">Cancel</button>
-          <span id="yaml-status" class="hint-line"></span>
-        </div>
-        <div id="yaml-diagnostics"></div>
-        <pre id="yaml-view" class="mono yaml"></pre>
-        <textarea id="yaml-editor" class="mono hidden" spellcheck="false"></textarea>
-      </div>
-      <div id="tab-inventory" class="tab-panel">
-        <div id="inventory-layout">
-          <section>
-            <div class="props-heading">Inventory</div>
-            <div class="inv-toolbar">
-              <button id="inv-add-group" class="mini-btn">+ group</button>
-              <button id="inv-add-ungrouped" class="mini-btn">+ ungrouped host</button>
-            </div>
-            <div id="inv-groups" class="scroll"></div>
-          </section>
-          <section>
-            <div class="props-heading">Credentials</div>
-            <div class="hint-line" style="margin-bottom:6px">
-              Secrets are write-only, encrypted at rest, and never inlined into inventory or playbooks.
-            </div>
-            <div id="cred-list" class="scroll"></div>
-            <form id="cred-add-form">
-              <input id="cred-name" type="text" placeholder="Name" required>
-              <select id="cred-kind">
-                <option value="ssh_key">ssh_key</option>
-                <option value="ssh_password">ssh_password</option>
-                <option value="become_password">become_password</option>
-                <option value="api_key">api_key</option>
-                <option value="s3">s3</option>
-              </select>
-              <textarea id="cred-secret" placeholder="Secret (stored encrypted, never shown again)" required></textarea>
-              <button class="primary" type="submit">Store credential</button>
-            </form>
-          </section>
-        </div>
-      </div>
-      <div id="tab-deployments" class="tab-panel">
-        <div id="deploy-layout">
-          <section id="deploy-side">
-            <div class="props-heading">New deployment</div>
-            <form id="deploy-run-form">
-              <label class="deploy-opt"><input type="checkbox" id="deploy-check"> check mode (--check)</label>
-              <label class="deploy-opt"><input type="checkbox" id="deploy-diff"> diff (--diff)</label>
-              <input id="deploy-tags" type="text" placeholder="tags (comma-separated)">
-              <input id="deploy-limit" type="text" placeholder="limit (e.g. node01)">
-              <select id="deploy-verbosity">
-                <option value="0">verbosity: normal</option>
-                <option value="1">-v</option>
-                <option value="2">-vv</option>
-                <option value="3">-vvv</option>
-                <option value="4">-vvvv</option>
-              </select>
-              <button id="deploy-run-btn" class="primary" type="submit" disabled>Run ansible-playbook</button>
-              <div id="deploy-note" class="hint-line"></div>
-            </form>
-            <div class="props-heading" style="margin-top:10px">
-              History
-              <button id="deploy-refresh" class="mini-btn" style="margin-left:6px">⟳</button>
-            </div>
-            <div id="deploy-list" class="scroll"></div>
-          </section>
-          <section id="deploy-detail">
-            <div class="empty-state">Select a deployment to inspect.</div>
-          </section>
-        </div>
-      </div>
-    </div>
-  </footer>
 
   <script type="module" src="js/app.js"></script>
 </body>

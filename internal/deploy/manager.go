@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/visualible/visualible/internal/ir"
-	"github.com/visualible/visualible/internal/store"
+	"github.com/dotfrankruan/visualible/internal/ir"
+	"github.com/dotfrankruan/visualible/internal/store"
 )
 
 // Manager orchestrates deployment lifecycle: validate → prepare → execute

@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/visualible/visualible/internal/ansible"
-	"github.com/visualible/visualible/internal/ir"
+	"github.com/dotfrankruan/visualible/internal/ansible"
+	"github.com/dotfrankruan/visualible/internal/ir"
 )
 
 // --- fakes ---

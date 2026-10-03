@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/visualible/visualible/internal/ir"
+	"github.com/dotfrankruan/visualible/internal/ir"
 )
 
 const deploymentsSchema = `

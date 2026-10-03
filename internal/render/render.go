@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/visualible/visualible/internal/ir"
+	"github.com/dotfrankruan/visualible/internal/ir"
 	"gopkg.in/yaml.v3"
 )
 

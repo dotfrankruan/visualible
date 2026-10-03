@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/visualible/visualible/internal/parse"
+	"github.com/dotfrankruan/visualible/internal/parse"
 )
 
 // --- Parse (YAML import) API ---

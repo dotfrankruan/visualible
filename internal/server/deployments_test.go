@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/visualible/visualible/internal/ansible"
-	"github.com/visualible/visualible/internal/deploy"
-	"github.com/visualible/visualible/internal/ir"
-	"github.com/visualible/visualible/internal/store"
+	"github.com/dotfrankruan/visualible/internal/ansible"
+	"github.com/dotfrankruan/visualible/internal/deploy"
+	"github.com/dotfrankruan/visualible/internal/ir"
+	"github.com/dotfrankruan/visualible/internal/store"
 )
 
 // fakeRunner records invocations and optionally writes callback events.

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/visualible/visualible/internal/ir"
+	"github.com/dotfrankruan/visualible/internal/ir"
 )
 
 // NormalizeCallbackEvent converts one JSON line emitted by the

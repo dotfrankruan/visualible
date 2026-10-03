@@ -17,7 +17,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/visualible/visualible/internal/ir"
+	"github.com/dotfrankruan/visualible/internal/ir"
 )
 
 // Store wraps the application database.

@@ -13,9 +13,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/visualible/visualible/internal/ansible"
-	"github.com/visualible/visualible/internal/ir"
-	"github.com/visualible/visualible/internal/render"
+	"github.com/dotfrankruan/visualible/internal/ansible"
+	"github.com/dotfrankruan/visualible/internal/ir"
+	"github.com/dotfrankruan/visualible/internal/render"
 )
 
 //go:embed callback/visualible_events.py

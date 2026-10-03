@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/visualible/visualible/internal/ai"
-	"github.com/visualible/visualible/internal/parse"
-	"github.com/visualible/visualible/internal/store"
+	"github.com/dotfrankruan/visualible/internal/ai"
+	"github.com/dotfrankruan/visualible/internal/parse"
+	"github.com/dotfrankruan/visualible/internal/store"
 )
 
 // --- Settings API ---

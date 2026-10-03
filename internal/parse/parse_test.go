@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/visualible/visualible/internal/render"
+	"github.com/dotfrankruan/visualible/internal/render"
 )
 
 const demoYAML = `

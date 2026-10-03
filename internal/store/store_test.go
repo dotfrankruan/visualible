@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/visualible/visualible/internal/ir"
+	"github.com/dotfrankruan/visualible/internal/ir"
 )
 
 func openTest(t *testing.T) *Store {
