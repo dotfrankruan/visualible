@@ -18,9 +18,36 @@ export function wireBuild() {
 
 export async function renderBuild() {
   renderPlayFields();
+  await refreshRecognitions();
   renderCanvas();
   renderProps();
   await renderPalette();
+}
+
+// refreshRecognitions asks the backend which tasks map faithfully to
+// curated Actions. Tasks that do not map stay Advanced Ansible tasks —
+// configuration is never hidden.
+let recognitionInFlight = false;
+async function refreshRecognitions() {
+  if (recognitionInFlight) return;
+  const play = store.currentPlay();
+  if (!play) return;
+  const all = [...(play.tasks ?? []), ...(play.handlers ?? [])];
+  if (!all.length) {
+    store.server.recognitions = new Map();
+    return;
+  }
+  recognitionInFlight = true;
+  try {
+    const { recognitions } = await api.actionsRecognize(all);
+    const map = new Map();
+    for (const r of recognitions ?? []) map.set(r.taskId, r);
+    store.server.recognitions = map;
+  } catch {
+    store.server.recognitions = new Map();
+  } finally {
+    recognitionInFlight = false;
+  }
 }
 
 // ---------- Play fields (friendly language) ----------
@@ -108,16 +135,39 @@ function renderActionButtons() {
   const empty = $('#empty-actions');
   palette.replaceChildren();
   empty.replaceChildren();
-  for (const a of store.server.actions ?? []) {
-    const btn = (cls) => el('button', {
-      class: cls, onclick: () => addAction(a),
-    },
-      el('span', { class: 'a-icon' }, a.icon),
-      el('span', { class: 'a-label' }, a.name,
-        el('span', { class: 'a-sub' }, a.summary ?? '')));
-    palette.append(btn('action-btn'));
-    empty.append(btn('action-btn'));
+
+  const actions = store.server.actions ?? [];
+  if (!actions.length) {
+    palette.append(el('div', { class: 'empty-state' },
+      'Describe what you want with Ask AI, or browse all Ansible modules below.'));
+    return;
   }
+
+  // The empty state shows the six most common actions; the palette lists
+  // every available one.
+  const common = ['install-software', 'manage-service', 'create-user',
+    'deploy-file', 'render-template', 'run-command'];
+  for (const a of actions) {
+    if (a.available === false) continue;
+    palette.append(actionButton(a));
+    if (common.includes(a.id)) empty.append(actionButton(a));
+  }
+  // Unavailable actions stay visible but disabled, with the reason.
+  for (const a of actions) {
+    if (a.available !== false) continue;
+    palette.append(actionButton(a, true));
+  }
+}
+
+function actionButton(a, disabled = false) {
+  return el('button', {
+    class: 'action-btn', disabled,
+    title: disabled ? (a.reason ?? 'unavailable') : (a.explanation ?? ''),
+    onclick: () => addAction(a),
+  },
+    el('span', { class: 'a-icon' }, a.icon),
+    el('span', { class: 'a-label' }, a.name,
+      el('span', { class: 'a-sub' }, disabled ? (a.reason ?? 'unavailable') : (a.summary ?? ''))));
 }
 
 // ---------- Advanced module browser ----------
