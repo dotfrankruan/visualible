@@ -54,4 +54,34 @@ export const api = {
     request('/api/settings', { method: 'PUT', body: JSON.stringify(settings) }),
   aiGenerate: (intent, currentYaml) =>
     request('/api/ai/generate', { method: 'POST', body: JSON.stringify({ intent, currentYaml }) }),
+
+  // AI change proposals (structured IR + semantic diff).
+  aiPropose: (intent, playbook, baseRevision) =>
+    request('/api/ai/proposals', {
+      method: 'POST',
+      body: JSON.stringify({ intent, playbook, baseRevision }),
+    }),
+  aiMerge: (base, proposed, accepted) =>
+    request('/api/ai/merge', {
+      method: 'POST',
+      body: JSON.stringify({ base, proposed, accepted }),
+    }),
+
+  // Actions (curated beginner-friendly automation building blocks).
+  actions: () => request('/api/actions'),
+  actionGenerate: (action, params) =>
+    request('/api/actions/generate', { method: 'POST', body: JSON.stringify({ action, params }) }),
+  actionsRecognize: (tasks) =>
+    request('/api/actions/recognize', { method: 'POST', body: JSON.stringify({ tasks }) }),
+
+  // Targets.
+  renderInventory: (inventory) =>
+    request('/api/render/inventory', { method: 'POST', body: JSON.stringify({ inventory }) }),
+  testTarget: (host) =>
+    request('/api/targets/test', { method: 'POST', body: JSON.stringify({ host }) }),
+  preflight: (projectId, inventoryId) =>
+    request('/api/deployments/preflight', {
+      method: 'POST',
+      body: JSON.stringify({ projectId, inventoryId }),
+    }),
 };

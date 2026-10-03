@@ -68,6 +68,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/modules/{fqcn}", s.handleModuleDoc)
 	s.mux.HandleFunc("POST /api/render", s.handleRender)
 	s.mux.HandleFunc("POST /api/parse", s.handleParse)
+	s.mux.HandleFunc("POST /api/render/inventory", s.handleRenderInventory)
 
 	s.mux.HandleFunc("GET /api/projects", s.handleProjectList)
 	s.mux.HandleFunc("POST /api/projects", s.handleProjectCreate)

@@ -1,5 +1,5 @@
-// Settings + AI dialogs. Settings contain only credential references for
-// secrets; AI proposals always land in the editor as reviewable IR.
+// Settings dialog. Settings contain only credential references for
+// secrets; the AI editing workflow itself lives in ai.js.
 
 import { api } from './api.js';
 import * as store from './store.js';
@@ -14,18 +14,7 @@ export function wireSettingsAI() {
   $('#settings-modal').addEventListener('click', (e) => {
     if (e.target.id === 'settings-modal') closeSettings();
   });
-
-  $('#btn-ai').addEventListener('click', openAI);
-  $('#ai-close').addEventListener('click', closeAI);
-  $('#ai-modal').addEventListener('click', (e) => {
-    if (e.target.id === 'ai-modal') closeAI();
-  });
-  $('#ai-generate').addEventListener('click', generate);
-  $('#ai-apply').addEventListener('click', applyProposal);
-  $('#ai-discard').addEventListener('click', discardProposal);
 }
-
-// ---------- Settings ----------
 
 async function openSettings() {
   $('#settings-modal').classList.remove('hidden');
@@ -77,92 +66,13 @@ async function saveSettings(e) {
     },
   };
   try {
-    await api.saveSettings(next);
+    const saved = await api.saveSettings(next);
+    store.server.settings = saved;
     closeSettings();
     // Ansible availability may have changed via path overrides.
-    const health = await api.health();
-    store.server.health = health;
+    store.server.health = await api.health().catch(() => store.server.health);
     location.reload(); // module catalog and run-form state depend on it
   } catch (err) {
     alert(`Save settings failed: ${err.message}`);
   }
-}
-
-// ---------- AI assistant ----------
-
-let proposal = null;
-
-function openAI() {
-  $('#ai-modal').classList.remove('hidden');
-  $('#ai-intent').focus();
-}
-
-function closeAI() {
-  $('#ai-modal').classList.add('hidden');
-  discardProposal();
-}
-
-async function generate() {
-  const intent = $('#ai-intent').value.trim();
-  if (!intent) return;
-  const status = $('#ai-status');
-  const resultEl = $('#ai-result');
-  status.textContent = 'Generating…';
-  $('#ai-generate').disabled = true;
-  resultEl.replaceChildren();
-  $('#ai-actions').classList.add('hidden');
-
-  let currentYaml = '';
-  const play = store.currentPlay();
-  if (play && (play.tasks?.length || play.handlers?.length)) {
-    try {
-      currentYaml = (await api.render(store.currentPlaybook())).yaml;
-    } catch { /* proceed without grounding */ }
-  }
-
-  try {
-    const res = await api.aiGenerate(intent, currentYaml);
-    proposal = res.playbook;
-    status.textContent = 'Proposal ready — review before applying.';
-    const diags = res.diagnostics ?? [];
-    if (diags.length) {
-      const dEl = el('div', {});
-      for (const d of diags) {
-        dEl.append(el('div', { class: `diag ${d.severity}` },
-          el('span', { class: 'path' }, d.path), d.message));
-      }
-      resultEl.append(dEl);
-    }
-    const playCount = res.playbook?.plays?.length ?? 0;
-    const taskCount = (res.playbook?.plays ?? []).reduce((n, p) => n + (p.tasks?.length ?? 0), 0);
-    resultEl.append(el('div', { class: 'hint-line' },
-      `Proposed playbook: ${playCount} play(s), ${taskCount} task(s). Applying replaces the current playbook (undoable).`));
-    $('#ai-actions').classList.remove('hidden');
-  } catch (err) {
-    proposal = null;
-    status.textContent = err.code === 'ai_not_configured'
-      ? 'AI is not configured. Open Settings to set an endpoint and model.'
-      : `Generation failed: ${err.message}`;
-  } finally {
-    $('#ai-generate').disabled = false;
-  }
-}
-
-function applyProposal() {
-  if (!proposal) return;
-  store.commit('ai apply', (proj) => {
-    proj.playbooks[0] = proposal;
-  });
-  store.editor.selected = null;
-  store.ui.yamlDirty = true;
-  closeAI();
-  document.querySelector('#tabs .tab[data-tab="yaml"]').click();
-}
-
-function discardProposal() {
-  proposal = null;
-  $('#ai-result')?.replaceChildren();
-  $('#ai-actions')?.classList.add('hidden');
-  const s = $('#ai-status');
-  if (s) s.textContent = '';
 }

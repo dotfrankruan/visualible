@@ -1,5 +1,6 @@
-// Deployments tab: launch form, deployment list, and a structured live
-// view driven by normalized Server-Sent Events (never raw terminal only).
+// Deploy stage: deliberate preflight, friendly progress language, and
+// raw Ansible output behind an expander. Driven by structured SSE events
+// — never by parsing terminal text in the browser.
 
 import { api } from './api.js';
 import * as store from './store.js';
@@ -9,26 +10,47 @@ const $ = (sel) => document.querySelector(sel);
 
 let selectedDeployment = null;
 let eventSource = null;
-// taskViews tracks rendered task rows for live updates: key -> row el.
-let taskViews = new Map();
+let hostBlocks = new Map(); // host -> { list: el, tasks: Map }
 let liveLogEl = null;
 
-export function wireDeploymentsTab() {
+export function wireDeploy() {
   $('#deploy-run-form').addEventListener('submit', startDeployment);
   $('#deploy-refresh').addEventListener('click', loadDeployments);
+  $('#deploy-advanced-toggle').addEventListener('click', (e) => {
+    const open = $('#deploy-advanced').classList.toggle('hidden');
+    e.currentTarget.classList.toggle('open', !open);
+  });
 }
 
-export async function renderDeployments() {
-  await Promise.all([loadBackendInfo(), loadDeployments()]);
+export async function renderDeploy() {
+  await loadDeployments();
   renderRunFormState();
+  renderPreflight();
 }
 
-async function loadBackendInfo() {
-  try {
-    store.server.deployBackend = await api.deployBackend();
-  } catch {
-    store.server.deployBackend = null;
-  }
+// ---------- Preflight (honest, no invented numbers) ----------
+
+async function renderPreflight() {
+  const wrap = $('#deploy-preflight');
+  wrap.replaceChildren();
+  const proj = store.editor.project;
+  const inv = proj?.inventories?.[0];
+  const hosts = inv ? countHosts(inv) : 0;
+  const tasks = store.currentPlay()?.tasks ?? [];
+
+  wrap.append(
+    preflightRow(hosts > 0, 'Targets', hosts ? `${hosts} machine(s)` : 'none yet — add machines on the Targets page'),
+    preflightRow(tasks.length > 0, 'Automation', tasks.length ? `${tasks.length} step(s)` : 'nothing to do yet — add steps on the Build page'),
+    preflightRow(store.server.health?.ansible?.available, 'Ansible',
+      store.server.health?.ansible?.available ? 'ready' : 'not detected'),
+  );
+}
+
+function preflightRow(ok, label, detail) {
+  return el('div', { class: `preflight-row ${ok ? 'ok' : 'err'}` },
+    el('span', { class: 'icon' }, ok ? '✓' : '✗'),
+    el('span', {}, label),
+    el('span', { class: 'detail' }, detail));
 }
 
 function renderRunFormState() {
@@ -37,18 +59,22 @@ function renderRunFormState() {
   const ansibleUp = store.server.health?.ansible?.available;
   const inv = store.editor.project?.inventories?.[0];
   const hosts = inv ? countHosts(inv) : 0;
+  const tasks = store.currentPlay()?.tasks ?? [];
   if (!ansibleUp) {
     btn.disabled = true;
     note.textContent = 'Ansible is not detected; deployments are unavailable.';
   } else if (!hosts) {
     btn.disabled = true;
-    note.textContent = 'Add at least one host in the Inventory tab first.';
+    note.textContent = 'Add at least one machine on the Targets page first.';
+  } else if (!tasks.length) {
+    btn.disabled = true;
+    note.textContent = 'Add automation steps on the Build page first.';
   } else if (store.editor.dirty) {
     btn.disabled = true;
     note.textContent = 'Save the project before deploying (Ctrl/Cmd+S).';
   } else {
     btn.disabled = false;
-    note.textContent = `${hosts} host(s) targeted.`;
+    note.textContent = '';
   }
 }
 
@@ -83,7 +109,7 @@ async function startDeployment(e) {
     selectDeployment(d.id);
   } catch (err) {
     const msg = err.problems?.length ? err.problems.join('\n') : err.message;
-    alert(`Deployment rejected:\n${msg}`);
+    alert(`Deployment could not start:\n${msg}`);
   } finally {
     renderRunFormState();
   }
@@ -117,10 +143,12 @@ function statusIcon(status) {
   return { pending: '…', running: '●', succeeded: '✓', failed: '✗', canceled: '◼' }[status] ?? '?';
 }
 
+// ---------- Live structured view ----------
+
 async function selectDeployment(id) {
   selectedDeployment = id;
   if (eventSource) { eventSource.close(); eventSource = null; }
-  taskViews = new Map();
+  hostBlocks = new Map();
 
   const detail = $('#deploy-detail');
   detail.replaceChildren();
@@ -133,27 +161,53 @@ async function selectDeployment(id) {
     }, 'Cancel'),
   );
   const statusLine = el('div', { class: 'deploy-detail-status', id: 'deploy-status-line' }, '');
-  const structured = el('div', { id: 'deploy-structured', class: 'scroll' });
-  const logLabel = el('div', { class: 'section-label' }, 'Log');
-  const log = el('pre', { id: 'deploy-log', class: 'mono scroll' });
+  const structured = el('div', { id: 'deploy-structured' });
+  const logsToggle = el('button', { class: 'mini-btn', id: 'deploy-log-toggle' }, '▸ Raw Ansible output');
+  const log = el('pre', { id: 'deploy-log', class: 'mono hidden' });
+  logsToggle.addEventListener('click', () => {
+    const open = log.classList.toggle('hidden');
+    logsToggle.textContent = (open ? '▸' : '▾') + ' Raw Ansible output';
+  });
   liveLogEl = log;
-  detail.append(header, statusLine, structured, logLabel, log);
+  detail.append(header, statusLine, structured, logsToggle, log);
 
   loadDeployments();
 
-  // Replay + live via SSE.
   eventSource = new EventSource(`/api/deployments/${encodeURIComponent(id)}/events`);
-  eventSource.onmessage = (msg) => {
-    const ev = JSON.parse(msg.data);
-    handleEvent(ev);
-  };
+  eventSource.onmessage = (msg) => handleEvent(JSON.parse(msg.data));
   eventSource.onerror = () => {
-    // Server closes the stream when finished; refresh final state.
     eventSource.close();
     eventSource = null;
     loadDeployments();
     renderRunFormState();
   };
+}
+
+// friendlyStatus translates Ansible jargon into outcome language.
+// Advanced users still see the raw status in parentheses via title attr.
+function friendlyStatus(type, changed) {
+  switch (type) {
+    case 'task.ok': return 'Already correct';
+    case 'task.changed': return 'Updated';
+    case 'task.skipped': return 'Skipped';
+    case 'task.failed': return 'Failed';
+    case 'host.unreachable': return 'Unreachable';
+    default: return changed ? 'Updated' : '';
+  }
+}
+
+function hostBlock(host) {
+  if (hostBlocks.has(host)) return hostBlocks.get(host);
+  const structured = $('#deploy-structured');
+  const tasks = new Map();
+  const list = el('div', {});
+  const block = el('div', { class: 'deploy-host-block' },
+    el('div', { class: 'deploy-host-name' }, host || '(local)'),
+    list);
+  structured.append(block);
+  const entry = { list, tasks };
+  hostBlocks.set(host, entry);
+  return entry;
 }
 
 function handleEvent(ev) {
@@ -163,21 +217,22 @@ function handleEvent(ev) {
 
   switch (ev.type) {
     case 'deployment.started':
-      statusLine.textContent = 'running…';
+      statusLine.textContent = 'Deploying…';
       $('#deploy-cancel-btn')?.classList.remove('hidden');
       break;
     case 'play.started':
-      structured.append(el('div', { class: 'play-header' }, `PLAY [${ev.play}]`));
+      structured.append(el('div', { class: 'play-header' }, `Starting: ${ev.play}`));
       break;
     case 'task.started':
     case 'handler.started': {
+      const hb = hostBlock(ev.host || '…');
       const key = `${ev.play}|${ev.task}`;
       const row = el('div', { class: 'deploy-task running' },
         el('span', { class: 'task-icon' }, '●'),
         el('span', { class: 'task-name' }, ev.task),
-        el('span', { class: 'task-state' }, ev.type === 'handler.started' ? 'handler' : 'running'));
-      taskViews.set(key, row);
-      structured.append(row);
+        el('span', { class: 'task-state' }, 'Running'));
+      hb.tasks.set(key, row);
+      hb.list.append(row);
       break;
     }
     case 'task.ok':
@@ -185,28 +240,33 @@ function handleEvent(ev) {
     case 'task.skipped':
     case 'task.failed':
     case 'host.unreachable': {
-      const key = `${ev.play}|${ev.task}`;
-      const row = taskViews.get(key);
       const state = { 'task.ok': 'ok', 'task.changed': 'changed', 'task.skipped': 'skipped', 'task.failed': 'failed', 'host.unreachable': 'unreachable' }[ev.type];
       const icon = { ok: '✓', changed: '✓', skipped: '–', failed: '✗', unreachable: '✗' }[state];
+      const hb = hostBlock(ev.host || '…');
+      const key = `${ev.play}|${ev.task}`;
+      const friendly = friendlyStatus(ev.type, ev.changed);
+      const row = hb.tasks.get(key);
       if (row) {
         row.className = `deploy-task ${state}`;
         row.querySelector('.task-icon').textContent = icon;
-        row.querySelector('.task-state').textContent = state + (ev.host ? ` · ${ev.host}` : '');
+        row.querySelector('.task-state').textContent = friendly;
+        row.querySelector('.task-state').title = ev.type;
       } else {
-        structured.append(el('div', { class: `deploy-task ${state}` },
+        hb.tasks.set(key, el('div', { class: `deploy-task ${state}` },
           el('span', { class: 'task-icon' }, icon),
           el('span', { class: 'task-name' }, ev.task),
-          el('span', { class: 'task-state' }, state + (ev.host ? ` · ${ev.host}` : ''))));
+          el('span', { class: 'task-state', title: ev.type }, friendly)));
+        hb.list.append(hb.tasks.get(key));
       }
       if (ev.message && (state === 'failed' || state === 'unreachable')) {
-        structured.append(el('div', { class: 'deploy-task-msg' }, ev.message));
+        hb.list.append(el('div', { class: 'deploy-task-msg' },
+          humanizeFailure(ev) + '\n\n' + ev.message));
       }
       break;
     }
     case 'deployment.finished': {
-      const final = ev.status ? `finished: ${ev.status}` : (ev.message || 'finished');
-      statusLine.textContent = final;
+      const map = { succeeded: '✓ Finished — everything is done', failed: '✗ Deployment had failures', canceled: '◼ Canceled' };
+      statusLine.textContent = map[ev.status] ?? (ev.message || 'Finished');
       $('#deploy-cancel-btn')?.classList.add('hidden');
       loadDeployments();
       break;
@@ -219,4 +279,11 @@ function handleEvent(ev) {
       }
       break;
   }
+}
+
+function humanizeFailure(ev) {
+  if (ev.type === 'host.unreachable') {
+    return `Visualible could not connect to ${ev.host} over SSH. Check the address, SSH user and credential on the Targets page.`;
+  }
+  return `“${ev.task}” failed on ${ev.host}.`;
 }

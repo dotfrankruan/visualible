@@ -24,6 +24,9 @@ export const server = {
   projects: [],              // project metadata list
   credentials: [],           // credential metadata (never secrets)
   deployBackend: null,       // backend metadata + capabilities
+  settings: null,            // app settings (no secrets)
+  actions: [],               // curated action definitions
+  recognitions: new Map(),   // taskId -> recognition result
 };
 
 // ---------- Editor state (working IR + history) ----------
@@ -32,6 +35,7 @@ export const editor = {
   project: null,    // ir.Project (source of truth; playbook = playbooks[0])
   selected: null,   // { kind: 'task'|'handler', id } | null
   dirty: false,
+  revision: 0,      // bumped on every mutation; AI proposals capture it
   past: [],         // undo stack of serialized projects
   future: [],       // redo stack
 };
@@ -39,7 +43,8 @@ export const editor = {
 // ---------- UI state ----------
 
 export const ui = {
-  tab: 'visual',
+  stage: 'build',        // build | targets | review | deploy
+  draftAction: null,     // action being configured (not yet added)
   moduleSearch: '',
   moduleCollection: '',
   selectedModule: null, // fqcn selected in the module browser
@@ -62,6 +67,7 @@ export function commit(label, mutate) {
   editor.future = [];
   mutate(editor.project);
   editor.dirty = true;
+  editor.revision++;
   ui.yamlDirty = true;
   emit('editor', { label });
   emit('history');
@@ -72,6 +78,7 @@ export function undo() {
   editor.future.push(snapshot());
   editor.project = JSON.parse(editor.past.pop());
   editor.dirty = true;
+  editor.revision++;
   ui.yamlDirty = true;
   if (editor.selected && !findTask(editor.selected.id)) editor.selected = null;
   emit('editor', { label: 'undo' });
@@ -83,6 +90,7 @@ export function redo() {
   editor.past.push(snapshot());
   editor.project = JSON.parse(editor.future.pop());
   editor.dirty = true;
+  editor.revision++;
   ui.yamlDirty = true;
   if (editor.selected && !findTask(editor.selected.id)) editor.selected = null;
   emit('editor', { label: 'redo' });
@@ -120,6 +128,7 @@ export function loadProject(project) {
   editor.past = [];
   editor.future = [];
   editor.dirty = false;
+  editor.revision = 0;
   ui.yamlDirty = true;
   emit('editor', { label: 'load' });
   emit('history');
