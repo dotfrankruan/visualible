@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -50,6 +51,7 @@ func TestNormalizeModuleList(t *testing.T) {
 }
 
 func TestNormalizeModuleDoc(t *testing.T) {
+	// Fixture is real ansible-core 2.21.4 output for ansible.builtin.apt.
 	schema, err := NormalizeModuleDoc(readFixture(t, "doc-apt.json"))
 	if err != nil {
 		t.Fatalf("normalize: %v", err)
@@ -60,11 +62,11 @@ func TestNormalizeModuleDoc(t *testing.T) {
 	if schema.Collection != "ansible.builtin" {
 		t.Fatalf("collection = %q", schema.Collection)
 	}
-	if len(schema.Description) != 2 {
-		t.Fatalf("description lines = %d", len(schema.Description))
+	if len(schema.Description) != 1 || !strings.Contains(schema.Description[0], "apt") {
+		t.Fatalf("description wrong: %v", schema.Description)
 	}
-	if len(schema.Options) != 9 {
-		t.Fatalf("options = %d, want 9", len(schema.Options))
+	if len(schema.Options) != 25 {
+		t.Fatalf("options = %d, want 25", len(schema.Options))
 	}
 
 	state := schema.Options["state"]
@@ -85,21 +87,35 @@ func TestNormalizeModuleDoc(t *testing.T) {
 	if name == nil || name.Elements != "str" || name.Type != "list" {
 		t.Fatalf("name option wrong: %+v", name)
 	}
-	if len(name.Aliases) != 2 || name.Aliases[0] != "pkg" {
+	if len(name.Aliases) != 2 || name.Aliases[0] != "package" {
 		t.Fatalf("name aliases = %v", name.Aliases)
 	}
 
+	// Real data: bool option with a *string* default and string version.
 	allow := schema.Options["allow_downgrade"]
-	if allow.Default != false || allow.VersionAdded != "2.12" {
+	if allow.Default != "no" || allow.VersionAdded != "2.12" || allow.Type != "bool" {
 		t.Fatalf("allow_downgrade wrong: %+v", allow)
 	}
 
-	if len(schema.SeeAlso) != 2 || schema.SeeAlso[0] != "ansible.builtin.apt_repository" {
+	// Real data: version_added emitted as a raw JSON number (2.19).
+	auto := schema.Options["auto_install_module_deps"]
+	if auto == nil {
+		t.Fatal("auto_install_module_deps missing")
+	}
+	if auto.VersionAdded != "2.19" {
+		t.Fatalf("numeric version_added = %q, want %q", auto.VersionAdded, "2.19")
+	}
+	if auto.Default != true {
+		t.Fatalf("auto_install_module_deps default = %v", auto.Default)
+	}
+
+	if len(schema.SeeAlso) != 1 || schema.SeeAlso[0] != "ansible.builtin.deb822_repository" {
 		t.Fatalf("seealso = %v", schema.SeeAlso)
 	}
 }
 
 func TestNormalizeModuleDocNestedSuboptions(t *testing.T) {
+	// Fixture is real output for community.docker.docker_container.
 	schema, err := NormalizeModuleDoc(readFixture(t, "doc-docker-container.json"))
 	if err != nil {
 		t.Fatalf("normalize: %v", err)
@@ -111,23 +127,46 @@ func TestNormalizeModuleDocNestedSuboptions(t *testing.T) {
 	if networks.Type != "list" || networks.Elements != "dict" {
 		t.Fatalf("networks type wrong: %q/%q", networks.Type, networks.Elements)
 	}
-	if len(networks.Suboptions) != 3 {
-		t.Fatalf("networks suboptions = %d", len(networks.Suboptions))
+	if len(networks.Suboptions) != 8 {
+		t.Fatalf("networks suboptions = %d, want 8", len(networks.Suboptions))
 	}
 	nn := networks.Suboptions["name"]
 	if nn == nil || !nn.Required || nn.Type != "str" {
 		t.Fatalf("networks.name wrong: %+v", nn)
 	}
 
-	// "options" as an alternate nesting key must also be recognized.
-	logcfg := schema.Options["log_config"]
-	if logcfg == nil || len(logcfg.Suboptions) != 1 || logcfg.Suboptions["driver"] == nil {
-		t.Fatalf("log_config suboptions not recognized: %+v", logcfg)
+	// Real data: choices containing booleans alongside strings.
+	pull := schema.Options["pull"]
+	if pull == nil || len(pull.Choices) != 5 {
+		t.Fatalf("pull option wrong: %+v", pull)
 	}
+	if pull.Choices[3] != true || pull.Choices[4] != false {
+		t.Fatalf("pull boolean choices wrong: %v", pull.Choices)
+	}
+	if pull.Default != "missing" {
+		t.Fatalf("pull default = %v", pull.Default)
+	}
+}
 
-	// Description given as a bare string must normalize to a list.
-	if len(networks.Description) != 1 {
-		t.Fatalf("string description not normalized: %v", networks.Description)
+func TestNormalizeOptionAlternateNestingAndStringDescription(t *testing.T) {
+	// Tolerance for older formats: "options" instead of "suboptions",
+	// and description as a bare string instead of a list. (Synthetic:
+	// kept as a guard even though current real data uses neither.)
+	doc := `{"test.coll.mod": {"doc": {"module": "mod", "collection": "test.coll",
+		"short_description": "t", "options": {
+			"cfg": {"type": "dict", "description": "bare string desc",
+				"options": {"driver": {"type": "str", "description": ["d"]}}}
+		}}}}`
+	schema, err := NormalizeModuleDoc([]byte(doc))
+	if err != nil {
+		t.Fatalf("normalize: %v", err)
+	}
+	cfg := schema.Options["cfg"]
+	if cfg == nil || len(cfg.Suboptions) != 1 || cfg.Suboptions["driver"] == nil {
+		t.Fatalf("options-nesting not recognized: %+v", cfg)
+	}
+	if len(cfg.Description) != 1 || cfg.Description[0] != "bare string desc" {
+		t.Fatalf("string description not normalized: %v", cfg.Description)
 	}
 }
 
@@ -244,8 +283,8 @@ func TestDiscoveryCaching(t *testing.T) {
 	if err != nil {
 		t.Fatalf("module: %v", err)
 	}
-	if len(s.Options) != 9 {
-		t.Fatalf("options = %d", len(s.Options))
+	if len(s.Options) != 25 {
+		t.Fatalf("options = %d, want 25", len(s.Options))
 	}
 	if calls != 2 {
 		t.Fatalf("expected 2 execs, got %d", calls)

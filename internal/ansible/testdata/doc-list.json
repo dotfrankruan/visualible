@@ -1,57 +1,7 @@
 {
-  "ansible.builtin.apt": {
-    "doc": {
-      "collection": "ansible.builtin",
-      "module": "apt",
-      "short_description": "Manage apt-packages",
-      "description": [
-        "Manages apt packages (such as for Debian/Ubuntu)."
-      ]
-    },
-    "examples": ""
-  },
-  "ansible.builtin.copy": {
-    "doc": {
-      "collection": "ansible.builtin",
-      "module": "copy",
-      "short_description": "Copy files to remote locations",
-      "description": [
-        "The copy module copies a file from the local or remote machine to a location on the remote machine."
-      ]
-    },
-    "examples": ""
-  },
-  "ansible.builtin.template": {
-    "doc": {
-      "collection": "ansible.builtin",
-      "module": "template",
-      "short_description": "Template a file out to a target host",
-      "description": [
-        "Templates are processed by the Jinja2 templating language."
-      ]
-    },
-    "examples": ""
-  },
-  "ansible.builtin.systemd_service": {
-    "doc": {
-      "collection": "ansible.builtin",
-      "module": "systemd_service",
-      "short_description": "Manage systemd units",
-      "description": [
-        "Controls systemd units on remote hosts."
-      ]
-    },
-    "examples": ""
-  },
-  "community.docker.docker_container": {
-    "doc": {
-      "collection": "community.docker",
-      "module": "docker_container",
-      "short_description": "manage docker containers",
-      "description": [
-        "Manage the life cycle of docker containers."
-      ]
-    },
-    "examples": ""
-  }
+ "ansible.builtin.apt": "Manages apt-packages",
+ "ansible.builtin.copy": "Copy files to remote locations",
+ "ansible.builtin.systemd_service": "Manage systemd units",
+ "ansible.builtin.template": "Template a file out to a target host",
+ "community.docker.docker_container": "manage Docker containers"
 }

@@ -73,12 +73,36 @@ func (s *strList) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
+// flexString accepts fields that ansible-doc emits either as strings or
+// as raw JSON numbers (version_added is a number in many real modules,
+// e.g. apt's auto_install_module_deps: 2.19). Raw number literals are
+// kept verbatim to avoid float reformatting.
+type flexString string
+
+func (f *flexString) UnmarshalJSON(b []byte) error {
+	b = bytes.TrimSpace(b)
+	if len(b) == 0 || bytes.Equal(b, []byte("null")) {
+		return nil
+	}
+	if b[0] == '"' {
+		var s string
+		if err := json.Unmarshal(b, &s); err != nil {
+			return err
+		}
+		*f = flexString(s)
+		return nil
+	}
+	// Number (or other scalar literal): keep the raw representation.
+	*f = flexString(string(b))
+	return nil
+}
+
 type rawDoc struct {
 	Collection       string                     `json:"collection"`
 	Module           string                     `json:"module"`
 	ShortDescription string                     `json:"short_description"`
 	Description      strList                    `json:"description"`
-	VersionAdded     string                     `json:"version_added"`
+	VersionAdded     flexString                 `json:"version_added"`
 	Requirements     strList                    `json:"requirements"`
 	Notes            strList                    `json:"notes"`
 	SeeAlso          []rawSeeAlso               `json:"seealso"`
@@ -98,6 +122,42 @@ type rawEntry struct {
 	Examples string  `json:"examples"`
 }
 
+// choicesList accepts choices as a list (common) or as an object mapping
+// each choice to its human description (real: ansible.builtin.dnf's
+// use_backend). Objects are flattened to their keys, sorted for
+// determinism.
+type choicesList []any
+
+func (c *choicesList) UnmarshalJSON(b []byte) error {
+	b = bytes.TrimSpace(b)
+	if len(b) == 0 || bytes.Equal(b, []byte("null")) {
+		return nil
+	}
+	if b[0] == '{' {
+		var m map[string]any
+		if err := json.Unmarshal(b, &m); err != nil {
+			return err
+		}
+		keys := make([]string, 0, len(m))
+		for k := range m {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		out := make(choicesList, 0, len(keys))
+		for _, k := range keys {
+			out = append(out, k)
+		}
+		*c = out
+		return nil
+	}
+	var list []any
+	if err := json.Unmarshal(b, &list); err != nil {
+		return err
+	}
+	*c = list
+	return nil
+}
+
 // rawOption mirrors one option. Suboptions may appear either nested under
 // "suboptions" or inlined as option keys (older formats); we support both.
 type rawOption struct {
@@ -105,17 +165,18 @@ type rawOption struct {
 	Description  strList                    `json:"description"`
 	Required     bool                       `json:"required"`
 	Default      any                        `json:"default"`
-	Choices      []any                      `json:"choices"`
+	Choices      choicesList                `json:"choices"`
 	Aliases      strList                    `json:"aliases"`
 	Elements     string                     `json:"elements"`
 	Suboptions   map[string]json.RawMessage `json:"suboptions"`
-	VersionAdded string                     `json:"version_added"`
+	VersionAdded flexString                 `json:"version_added"`
 	Options      map[string]json.RawMessage `json:"options"` // alternate nesting
 }
 
 // NormalizeModuleList parses `ansible-doc -l -j` output into summaries.
-// The exact shape has varied across Ansible versions; entries are accepted
-// when they contain either a doc object or a plain description field.
+// The real ansible-core 2.21 shape is a flat map of FQCN to short
+// description string; older/other shapes use an object with a doc
+// section. Both are accepted.
 func NormalizeModuleList(data []byte) ([]ModuleSummary, error) {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -123,26 +184,53 @@ func NormalizeModuleList(data []byte) ([]ModuleSummary, error) {
 	}
 	out := make([]ModuleSummary, 0, len(raw))
 	for fqcn, blob := range raw {
-		var entry rawEntry
-		if err := json.Unmarshal(blob, &entry); err != nil {
-			continue // tolerate unexpected entry shapes
-		}
-		if entry.Doc == nil {
+		b := bytes.TrimSpace(blob)
+		// Real shape: bare description string.
+		if len(b) > 0 && b[0] == '"' {
+			var desc string
+			if err := json.Unmarshal(b, &desc); err != nil {
+				continue
+			}
+			out = append(out, ModuleSummary{
+				FQCN:             fqcn,
+				Name:             shortName(fqcn),
+				Collection:       collectionOf(fqcn),
+				ShortDescription: desc,
+			})
 			continue
+		}
+		// Object shape with doc section.
+		var entry rawEntry
+		if err := json.Unmarshal(b, &entry); err != nil || entry.Doc == nil {
+			continue // tolerate unexpected entry shapes
 		}
 		name := entry.Doc.Module
 		if name == "" {
 			name = shortName(fqcn)
 		}
+		collection := entry.Doc.Collection
+		if collection == "" {
+			collection = collectionOf(fqcn)
+		}
 		out = append(out, ModuleSummary{
 			FQCN:             fqcn,
 			Name:             name,
-			Collection:       entry.Doc.Collection,
+			Collection:       collection,
 			ShortDescription: entry.Doc.ShortDescription,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].FQCN < out[j].FQCN })
 	return out, nil
+}
+
+// collectionOf derives the collection ("community.docker") from an FQCN
+// ("community.docker.docker_container").
+func collectionOf(fqcn string) string {
+	parts := strings.SplitN(fqcn, ".", 3)
+	if len(parts) < 2 {
+		return ""
+	}
+	return parts[0] + "." + parts[1]
 }
 
 // NormalizeModuleDoc parses `ansible-doc -j <fqcn>` output into a schema.
@@ -174,7 +262,7 @@ func NormalizeModuleDoc(data []byte) (*ModuleSchema, error) {
 		Collection:       d.Collection,
 		ShortDescription: d.ShortDescription,
 		Description:      d.Description,
-		VersionAdded:     d.VersionAdded,
+		VersionAdded:     string(d.VersionAdded),
 		Requirements:     d.Requirements,
 		Notes:            d.Notes,
 		Examples:         entry.Examples,
@@ -222,10 +310,10 @@ func normalizeOption(name string, blob json.RawMessage) (*OptionSchema, error) {
 		Description:  ro.Description,
 		Required:     ro.Required,
 		Default:      ro.Default,
-		Choices:      ro.Choices,
+		Choices:      []any(ro.Choices),
 		Aliases:      ro.Aliases,
 		Elements:     ro.Elements,
-		VersionAdded: ro.VersionAdded,
+		VersionAdded: string(ro.VersionAdded),
 	}
 	if opt.Type == "" {
 		opt.Type = "raw"

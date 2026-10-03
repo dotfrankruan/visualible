@@ -87,7 +87,7 @@ func TestModuleDoc(t *testing.T) {
 	ts := newTestServer(t)
 	var schema ansible.ModuleSchema
 	getJSON(t, ts.URL+"/api/modules/ansible.builtin.apt", http.StatusOK, &schema)
-	if schema.Name != "apt" || len(schema.Options) != 9 {
+	if schema.Name != "apt" || len(schema.Options) != 25 {
 		t.Fatalf("unexpected schema: %+v", schema)
 	}
 }
