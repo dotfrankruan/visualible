@@ -68,6 +68,9 @@ type Recognition struct {
 	Icon       string         `json:"icon,omitempty"`
 	Label      string         `json:"label,omitempty"`    // "Install nginx"
 	Subtitle   string         `json:"subtitle,omitempty"` // "Package: nginx · Installed"
+	// Presentation is always populated — including the Advanced fallback
+	// for tasks that cannot be represented faithfully.
+	Presentation Presentation `json:"presentation"`
 }
 
 // implementation is one Action: its definition plus generation and
@@ -101,6 +104,8 @@ func init() {
 	register(deployFile{})
 	register(renderTemplate{})
 	register(createDirectory{})
+	register(linkFile{})
+	register(removePath{})
 	register(runCommand{})
 	register(dockerContainer{})
 }
@@ -156,9 +161,31 @@ func RecognizeOne(t *ir.Task) Recognition {
 			Icon:       registry[id].Definition().Icon,
 			Label:      label,
 			Subtitle:   subtitle,
+			Presentation: Presentation{
+				Title:    label,
+				Subtitle: subtitle,
+				Module:   t.Module,
+				Details:  describeDetails(id, params),
+				Risks:    risksFor(t),
+			},
 		}
 	}
-	return Recognition{TaskID: t.ID, Recognized: false}
+	// Not representable faithfully: present it as an Advanced Ansible task
+	// with its real module and arguments visible, rather than inventing a
+	// friendlier-looking description that would be misleading.
+	return Recognition{
+		TaskID:     t.ID,
+		Recognized: false,
+		Icon:       "▸",
+		Presentation: Presentation{
+			Title:    "Advanced Ansible task",
+			Subtitle: t.Module,
+			Module:   t.Module,
+			Advanced: true,
+			Details:  describeRawArgs(t),
+			Risks:    risksFor(t),
+		},
+	}
 }
 
 // RecognizeAll maps a batch of tasks (and handlers).

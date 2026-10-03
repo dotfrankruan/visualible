@@ -9,6 +9,7 @@ import (
 	"github.com/dotfrankruan/visualible/internal/aidiff"
 	"github.com/dotfrankruan/visualible/internal/ir"
 	"github.com/dotfrankruan/visualible/internal/logging"
+	"github.com/dotfrankruan/visualible/internal/present"
 )
 
 // --- AI change-proposal API ---
@@ -35,18 +36,22 @@ const (
 // versions can persist it (proposals are ephemeral in v1 and never
 // contain provider credentials).
 type Proposal struct {
-	ID           string         `json:"id"`
-	ProjectID    string         `json:"projectId,omitempty"`
-	BaseRevision int            `json:"baseRevision"`
-	BaseHash     string         `json:"baseHash"`
-	Request      string         `json:"request"`
-	Model        string         `json:"model,omitempty"`
-	ProposedIR   *ir.Playbook   `json:"proposedIr,omitempty"`
-	Rationale    []string       `json:"rationale,omitempty"`
-	Diff         *aidiff.Diff   `json:"diff,omitempty"`
-	Diagnostics  []string       `json:"diagnostics,omitempty"`
-	CreatedAt    time.Time      `json:"createdAt"`
-	Status       ProposalStatus `json:"status"`
+	ID           string       `json:"id"`
+	ProjectID    string       `json:"projectId,omitempty"`
+	BaseRevision int          `json:"baseRevision"`
+	BaseHash     string       `json:"baseHash"`
+	Request      string       `json:"request"`
+	Model        string       `json:"model,omitempty"`
+	ProposedIR   *ir.Playbook `json:"proposedIr,omitempty"`
+	Rationale    []string     `json:"rationale,omitempty"`
+	Diff         *aidiff.Diff `json:"diff,omitempty"`
+	// View is the human review model: friendly titles, machine-level
+	// details, field-level changes, risk hints and wording. The raw Diff
+	// stays authoritative and is kept alongside it for experts.
+	View        *present.ProposalView `json:"view,omitempty"`
+	Diagnostics []string              `json:"diagnostics,omitempty"`
+	CreatedAt   time.Time             `json:"createdAt"`
+	Status      ProposalStatus        `json:"status"`
 }
 
 type aiProposalRequest struct {
@@ -156,6 +161,7 @@ func (s *Server) handleAIProposalCreate(w http.ResponseWriter, r *http.Request) 
 
 	// Visualible computes the diff; the model is not consulted about it.
 	proposal.Diff = aidiff.Playbooks(base, proposed.Playbook)
+	proposal.View = present.BuildView(base, proposed.Playbook, proposal.Diff)
 	proposal.Status = ProposalReady
 	logging.Info("ai proposal ready",
 		"proposal", proposal.ID,
@@ -208,7 +214,10 @@ func (s *Server) handleAIMerge(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		logging.Warn("ai merge rejected",
 			"acceptedChanges", len(req.Accepted), "err", err)
-		writeError(w, http.StatusUnprocessableEntity, "merge_invalid", err.Error())
+		// The user sees an explanation of which dependency is missing; the
+		// raw validation problem stays in Problems for experts.
+		writeError(w, http.StatusUnprocessableEntity, "merge_invalid",
+			present.MergeFailureMessage(err.Error()), err.Error())
 		return
 	}
 	logging.Info("ai proposal applied",

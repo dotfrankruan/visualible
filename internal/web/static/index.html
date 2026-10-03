@@ -293,21 +293,27 @@
   </div>
 
   <div id="ai-modal" class="modal hidden">
-    <div class="modal-card wide">
+    <div class="modal-card proposal">
       <div class="modal-header">
         <span>✨ What do you want these machines to do?</span>
         <button id="ai-close" class="mini-btn">✕</button>
       </div>
-      <div class="modal-body">
+
+      <div id="ai-compose" class="modal-body">
         <textarea id="ai-intent" placeholder="Install Docker on my Debian servers, create user frank, and make sure nginx starts after reboot."></textarea>
         <div class="modal-actions">
           <button id="ai-generate" class="primary">Generate proposal ✨</button>
         </div>
         <div id="ai-status" class="hint-line" style="margin-top:6px"></div>
-        <div id="ai-result"></div>
-        <div id="ai-actions" class="modal-actions hidden">
-          <button id="ai-apply" class="primary">Apply to project</button>
+      </div>
+
+      <div id="ai-review" class="hidden">
+        <div id="ai-review-head"></div>
+        <div id="ai-result" class="scroll"></div>
+        <div class="modal-footer">
+          <div id="ai-foot-note" class="hint-line"></div>
           <button id="ai-discard" class="mini-btn">Discard</button>
+          <button id="ai-apply" class="primary" disabled>Apply selected changes</button>
         </div>
       </div>
     </div>

@@ -235,9 +235,11 @@ func (manageService) Generate(params map[string]any) (*Generated, error) {
 }
 
 func (manageService) Recognize(t *ir.Task) (map[string]any, bool) {
+	// notify is allowed: it does not change what the service step does, and
+	// the curated editor preserves an existing notify when regenerating.
 	args, ok := match(t,
 		[]string{"ansible.builtin.service", "ansible.builtin.systemd_service", "ansible.builtin.systemd"},
-		[]string{"name", "state", "enabled"}, false)
+		[]string{"name", "state", "enabled"}, true)
 	if !ok {
 		return nil, false
 	}
@@ -629,8 +631,7 @@ func (renderTemplate) Recognize(t *ir.Task) (map[string]any, bool) {
 		}
 	}
 	if len(t.Notify) == 1 {
-		name := t.Notify[0]
-		params["restartService"] = strings.TrimSpace(strings.TrimPrefix(name, "Restart "))
+		params["restartService"] = stripServiceVerb(t.Notify[0])
 	}
 	return params, true
 }
@@ -642,6 +643,19 @@ func (renderTemplate) Describe(params map[string]any) (string, string) {
 		sub += fmt.Sprintf(" · restarts %s when changed", svc)
 	}
 	return fmt.Sprintf("Deploy %s", path.Base(dest)), sub
+}
+
+// stripServiceVerb removes a leading action word from a handler name
+// ("Restart nginx" -> "nginx") so the curated service field holds a
+// service name. Unknown names are kept as-is.
+func stripServiceVerb(name string) string {
+	name = strings.TrimSpace(name)
+	for _, verb := range []string{"Restart ", "Reload ", "Start ", "Stop ", "Enable "} {
+		if strings.HasPrefix(name, verb) {
+			return strings.TrimSpace(strings.TrimPrefix(name, verb))
+		}
+	}
+	return name
 }
 
 // =====================================================================
@@ -714,6 +728,143 @@ func (createDirectory) Recognize(t *ir.Task) (map[string]any, bool) {
 
 func (createDirectory) Describe(params map[string]any) (string, string) {
 	return fmt.Sprintf("Create folder %s", str(params, "path")), "Directory"
+}
+
+// =====================================================================
+// Create a link (e.g. enabling an nginx site)
+// =====================================================================
+
+type linkFile struct{}
+
+func (linkFile) Definition() Definition {
+	return Definition{
+		ID:      "link-file",
+		Name:    "Link a file",
+		Icon:    "🔗",
+		Summary: "Enable a file by linking it into place",
+		Explanation: "This makes an existing file available at another path — the usual way to " +
+			"enable a configuration that ships disabled.",
+		Fields: []Field{
+			{ID: "dest", Label: "Link path", Type: "text", Required: true,
+				Placeholder: "/etc/nginx/sites-enabled/reverse-proxy.conf"},
+			{ID: "src", Label: "Points to", Type: "text", Required: true,
+				Placeholder: "/etc/nginx/sites-available/reverse-proxy.conf"},
+			{ID: "force", Label: "Replace an existing link", Type: "bool", Default: true},
+		},
+	}
+}
+
+func (linkFile) Generate(params map[string]any) (*Generated, error) {
+	dest := strings.TrimSpace(str(params, "dest"))
+	src := strings.TrimSpace(str(params, "src"))
+	if dest == "" || src == "" {
+		return nil, fmt.Errorf("A link path and a target are required.")
+	}
+	args := map[string]any{"state": "link", "dest": dest, "src": src}
+	if boolParam(params, "force") {
+		args["force"] = true
+	}
+	return &Generated{Tasks: []*ir.Task{{
+		ID:     newID("t"),
+		Name:   fmt.Sprintf("Enable %s", path.Base(dest)),
+		Module: "ansible.builtin.file",
+		Args:   args,
+		Become: became(),
+	}}}, nil
+}
+
+func (linkFile) Recognize(t *ir.Task) (map[string]any, bool) {
+	args, ok := match(t, []string{"ansible.builtin.file"},
+		[]string{"state", "dest", "path", "src", "force", "owner", "group", "mode"}, false)
+	if !ok {
+		return nil, false
+	}
+	if state, _ := args["state"].(string); state != "link" {
+		return nil, false
+	}
+	// `path` is an alias of `dest` in ansible.builtin.file.
+	dest, _ := args["dest"].(string)
+	if dest == "" {
+		dest, _ = args["path"].(string)
+	}
+	src, _ := args["src"].(string)
+	if dest == "" || src == "" {
+		return nil, false
+	}
+	params := map[string]any{"dest": dest, "src": src}
+	if force, _ := args["force"].(bool); force {
+		params["force"] = true
+	}
+	return params, true
+}
+
+func (linkFile) Describe(params map[string]any) (string, string) {
+	return fmt.Sprintf("Enable %s", path.Base(str(params, "dest"))),
+		fmt.Sprintf("%s → %s", str(params, "dest"), str(params, "src"))
+}
+
+// =====================================================================
+// Remove a file or link (e.g. disabling a default configuration)
+// =====================================================================
+
+type removePath struct{}
+
+func (removePath) Definition() Definition {
+	return Definition{
+		ID:      "remove-path",
+		Name:    "Remove a file or link",
+		Icon:    "🗑",
+		Summary: "Delete a file or symbolic link",
+		Explanation: "This deletes the file or link if it exists. Removing a configuration file " +
+			"is how a default setting is disabled.",
+		Fields: []Field{
+			{ID: "path", Label: "Path", Type: "text", Required: true,
+				Placeholder: "/etc/nginx/sites-enabled/default"},
+		},
+	}
+}
+
+func (removePath) Generate(params map[string]any) (*Generated, error) {
+	p := strings.TrimSpace(str(params, "path"))
+	if p == "" {
+		return nil, fmt.Errorf("A path is required.")
+	}
+	name := fmt.Sprintf("Remove %s", path.Base(p))
+	if strings.Contains(p, "sites-enabled") {
+		name = fmt.Sprintf("Disable %s", path.Base(p))
+	}
+	return &Generated{Tasks: []*ir.Task{{
+		ID:     newID("t"),
+		Name:   name,
+		Module: "ansible.builtin.file",
+		Args:   map[string]any{"state": "absent", "path": p},
+		Become: became(),
+	}}}, nil
+}
+
+func (removePath) Recognize(t *ir.Task) (map[string]any, bool) {
+	args, ok := match(t, []string{"ansible.builtin.file"},
+		[]string{"state", "path"}, false)
+	if !ok {
+		return nil, false
+	}
+	if state, _ := args["state"].(string); state != "absent" {
+		return nil, false
+	}
+	p, _ := args["path"].(string)
+	if p == "" {
+		return nil, false
+	}
+	return map[string]any{"path": p}, true
+}
+
+func (removePath) Describe(params map[string]any) (string, string) {
+	p := str(params, "path")
+	label := fmt.Sprintf("Remove %s", path.Base(p))
+	if strings.Contains(p, "sites-enabled") {
+		label = fmt.Sprintf("Disable %s", path.Base(p))
+	}
+	return label, p
 }
 
 // =====================================================================

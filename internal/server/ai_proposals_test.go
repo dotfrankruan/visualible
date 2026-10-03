@@ -94,6 +94,39 @@ func TestAIProposalFlow(t *testing.T) {
 	if p.Model != "test-model" {
 		t.Fatalf("model = %q", p.Model)
 	}
+	// The review model must travel with the proposal so the UI can show
+	// machine-level intent instead of module dumps.
+	if p.View == nil {
+		t.Fatal("proposal view missing")
+	}
+	// Two task additions plus the play-level "administrator privileges"
+	// setting are all surfaced.
+	if !strings.Contains(p.View.Headline, "changes proposed") {
+		t.Fatalf("headline = %q", p.View.Headline)
+	}
+	titles := map[string]bool{}
+	for _, c := range p.View.Changes {
+		titles[c.Title] = true
+	}
+	for _, want := range []string{"Install nginx", "Start nginx", "Automation settings"} {
+		if !titles[want] {
+			t.Errorf("missing change view %q (have %v)", want, titles)
+		}
+	}
+	for _, c := range p.View.Changes {
+		if c.Title == "" || c.KindRank == "" || c.AcceptLabel == "" {
+			t.Fatalf("incomplete change view: %+v", c)
+		}
+		for _, text := range []string{c.Title, c.Subtitle} {
+			if strings.Contains(text, "ansible.builtin") {
+				t.Errorf("module name leaked into beginner-facing copy: %q", text)
+			}
+		}
+	}
+	// Raw diff and proposed IR remain available for expert inspection.
+	if p.Diff == nil || p.ProposedIR == nil {
+		t.Fatal("raw diff/proposed IR must remain for advanced inspection")
+	}
 	if p.BaseHash == "" {
 		t.Fatal("base hash missing")
 	}
