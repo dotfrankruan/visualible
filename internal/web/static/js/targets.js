@@ -21,11 +21,12 @@ export function wireTargets() {
     });
     renderGroups();
   });
-  $('#inv-add-ungrouped').addEventListener('click', () => {
-    store.commit('inv', (proj) => {
-      ensureInventory(proj).hosts.push(newHost(`machine${ensureInventory(proj).hosts.length + 1}`));
-    });
-    renderGroups();
+  $('#inv-add-ungrouped').addEventListener('click', () => openMachineModal(null));
+  $('#machine-close').addEventListener('click', closeMachineModal);
+  $('#machine-add').addEventListener('click', addMachineFromModal);
+  $('#machine-test').addEventListener('click', testMachineFromModal);
+  $('#machine-modal').addEventListener('click', (e) => {
+    if (e.target.id === 'machine-modal') closeMachineModal();
   });
   $('#cred-add-form').addEventListener('submit', addCredential);
 
@@ -122,10 +123,7 @@ function groupCard(inv, g) {
     el('span', { class: 'inv-count' }, `${(g.hosts ?? []).length} machine(s)`),
     el('button', {
       class: 'mini-btn',
-      onclick: () => {
-        store.commit('inv', () => { g.hosts = g.hosts ?? []; g.hosts.push(newHost(`machine${g.hosts.length + 1}`)); });
-        renderGroups();
-      },
+      onclick: () => openMachineModal(g),
     }, '+ machine'),
     el('button', {
       class: 'mini-btn danger',
@@ -141,13 +139,17 @@ function groupCard(inv, g) {
     }, '✕'),
   ));
 
-  const varsWrap = el('div', { class: 'inv-vars' });
+  const groupVarsToggle = el('button', { class: 'mini-btn', type: 'button' }, '▸ Advanced: group variables');
+  const varsWrap = el('div', { class: 'inv-vars hidden' });
   g.vars = g.vars ?? {};
-  varsWrap.append(el('div', { class: 'fdesc' }, 'group variables (advanced)'),
-    kvEditor(g.vars, (v) => {
-      store.commit('inv', () => { g.vars = v ?? {}; });
-    }));
-  card.append(varsWrap);
+  varsWrap.append(kvEditor(g.vars, (v) => {
+    store.commit('inv', () => { g.vars = v ?? {}; });
+  }));
+  groupVarsToggle.addEventListener('click', () => {
+    const open = varsWrap.classList.toggle('hidden');
+    groupVarsToggle.textContent = (open ? '▸' : '▾') + ' Advanced: group variables';
+  });
+  card.append(groupVarsToggle, varsWrap);
 
   for (const h of g.hosts ?? []) {
     card.append(hostCard(inv, g, h));
@@ -206,12 +208,18 @@ function hostCard(inv, group, h) {
   );
   row.append(resultEl);
 
-  const varsWrap = el('div', { class: 'inv-host-vars' });
+  // Ansible-specific variables stay behind an advanced expander.
+  const varsToggle = el('button', { class: 'mini-btn', type: 'button' }, '▸ Advanced: Ansible variables');
+  const varsWrap = el('div', { class: 'inv-host-vars hidden' });
   h.vars = h.vars ?? {};
   varsWrap.append(kvEditor(h.vars, (v) => {
     store.commit('inv', () => { h.vars = v ?? {}; });
   }));
-  row.append(varsWrap);
+  varsToggle.addEventListener('click', () => {
+    const open = varsWrap.classList.toggle('hidden');
+    varsToggle.textContent = (open ? '▸' : '▾') + ' Advanced: Ansible variables';
+  });
+  row.append(el('div', { class: 'inv-host-vars' }, varsToggle), varsWrap);
   return row;
 }
 
@@ -220,17 +228,105 @@ async function testConnection(h, resultEl) {
   resultEl.textContent = 'Testing connection…';
   try {
     const res = await api.testTarget(h);
+    resultEl.className = 'host-test-result ' + (res.ok ? 'ok' : 'err');
     if (res.ok) {
-      resultEl.classList.add('ok');
       resultEl.textContent = '✓ Connection works';
-    } else {
-      resultEl.classList.add('err');
-      resultEl.textContent = `✗ ${res.message || 'Could not connect'}`;
+      return;
     }
+    // Explain the failure in plain language and keep the raw details one
+    // hover away (advanced users can also read the deployment log).
+    const addr = h.address || h.name;
+    const target = h.sshPort ? `${addr}:${h.sshPort}` : addr;
+    resultEl.textContent = `✗ ${res.message} (${target})`;
+    resultEl.title = res.details || '';
   } catch (e) {
-    resultEl.classList.add('err');
+    resultEl.className = 'host-test-result err';
     resultEl.textContent = `✗ ${e.message}`;
   }
+}
+
+// ---------- Add machine (friendly form) ----------
+
+let machineTargetGroup = null;
+
+function openMachineModal(group) {
+  machineTargetGroup = group;
+  $('#machine-modal').classList.remove('hidden');
+  $('#machine-result').textContent = '';
+  $('#machine-result').className = 'host-test-result';
+  $('#machine-name').value = '';
+  $('#machine-address').value = '';
+  $('#machine-user').value = 'root';
+  $('#machine-port').value = '22';
+
+  const credSel = $('#machine-cred');
+  credSel.replaceChildren(el('option', { value: '' }, 'Default SSH keys / agent'));
+  for (const c of store.server.credentials ?? []) {
+    credSel.append(el('option', { value: c.id }, `${c.name} (${c.kind})`));
+  }
+
+  const groupSel = $('#machine-group');
+  const inv = ensureInventory(store.editor.project);
+  groupSel.replaceChildren(el('option', { value: '' }, 'Ungrouped'));
+  for (const g of inv.groups) {
+    const o = el('option', { value: g.id }, g.name);
+    if (group && g.id === group.id) o.selected = true;
+    groupSel.append(o);
+  }
+  groupSel.disabled = !!group; // invoked from a group header
+}
+
+function closeMachineModal() {
+  $('#machine-modal').classList.add('hidden');
+}
+
+function machineFromModal() {
+  const name = $('#machine-name').value.trim() || $('#machine-address').value.trim();
+  const host = newHost(name || 'machine');
+  host.name = name || 'machine';
+  host.address = $('#machine-address').value.trim() || undefined;
+  host.sshUser = $('#machine-user').value.trim() || undefined;
+  host.sshPort = parseInt($('#machine-port').value, 10) || undefined;
+  host.credentialId = $('#machine-cred').value || undefined;
+  return host;
+}
+
+async function testMachineFromModal() {
+  const host = machineFromModal();
+  const result = $('#machine-result');
+  result.className = 'host-test-result';
+  result.textContent = 'Testing connection…';
+  try {
+    const res = await api.testTarget(host);
+    result.className = 'host-test-result ' + (res.ok ? 'ok' : 'err');
+    result.textContent = (res.ok ? '✓ ' : '✗ ') + res.message;
+    if (!res.ok && res.details) {
+      result.title = res.details;
+    }
+  } catch (e) {
+    result.className = 'host-test-result err';
+    result.textContent = `✗ ${e.message}`;
+  }
+}
+
+function addMachineFromModal() {
+  const host = machineFromModal();
+  if (!host.name) return;
+  store.commit('inv', (proj) => {
+    const inv = ensureInventory(proj);
+    const groupID = $('#machine-group').value;
+    if (groupID) {
+      const g = inv.groups.find((x) => x.id === groupID);
+      if (g) {
+        g.hosts = g.hosts ?? [];
+        g.hosts.push(host);
+        return;
+      }
+    }
+    inv.hosts.push(host);
+  });
+  closeMachineModal();
+  renderGroups();
 }
 
 // ---------- Credentials ----------

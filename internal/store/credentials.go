@@ -166,6 +166,21 @@ func (s *Store) ListCredentials(ctx context.Context) ([]CredentialMeta, error) {
 	return out, rows.Err()
 }
 
+// ResolveSecret implements deploy.SecretResolver: it returns the kind and
+// the decrypted secret together so deployment backends can materialize
+// credentials without the HTTP layer ever seeing them.
+func (s *Store) ResolveSecret(ctx context.Context, credentialID string) (string, []byte, error) {
+	kind, err := s.CredentialKind(ctx, credentialID)
+	if err != nil {
+		return "", nil, err
+	}
+	secret, err := s.CredentialSecret(ctx, credentialID)
+	if err != nil {
+		return "", nil, err
+	}
+	return kind, secret, nil
+}
+
 // CredentialKind returns the kind of a credential without its secret.
 func (s *Store) CredentialKind(ctx context.Context, id string) (string, error) {
 	var kind string

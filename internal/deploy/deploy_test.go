@@ -41,6 +41,9 @@ type fakeRunner struct {
 	mu       sync.Mutex
 	runs     []recordedRun
 	exitCode int
+	// stdout, when set, is written to the process stdout (simulating
+	// ansible/ansible-playbook output).
+	stdout string
 	// eventScript, when set, is written to the VISUALIBLE_EVENT_FILE
 	// during the run (simulating the callback plugin).
 	eventScript []string
@@ -49,7 +52,11 @@ type fakeRunner struct {
 func (f *fakeRunner) Run(ctx context.Context, opts RunOpts) (int, error) {
 	f.mu.Lock()
 	f.runs = append(f.runs, recordedRun{Args: opts.Args, Dir: opts.Dir, Env: opts.Env})
+	stdout := f.stdout
 	f.mu.Unlock()
+	if stdout != "" && opts.Stdout != nil {
+		_, _ = opts.Stdout.Write([]byte(stdout))
+	}
 	if len(f.eventScript) > 0 && !strings.Contains(strings.Join(opts.Args, " "), "--syntax-check") {
 		for _, env := range opts.Env {
 			if path, ok := strings.CutPrefix(env, "VISUALIBLE_EVENT_FILE="); ok {

@@ -252,6 +252,31 @@
     </div>
   </div>
 
+  <div id="machine-modal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <span>Add machine</span>
+        <button id="machine-close" class="mini-btn">✕</button>
+      </div>
+      <div class="modal-body">
+        <label class="set-label">Name<input id="machine-name" type="text" placeholder="web01"></label>
+        <label class="set-label">Address<input id="machine-address" type="text" placeholder="10.0.0.11"></label>
+        <label class="set-label">SSH user<input id="machine-user" type="text" placeholder="root"></label>
+        <label class="set-label">Authentication<select id="machine-cred"></select></label>
+        <label class="set-label">Port<input id="machine-port" type="number" value="22"></label>
+        <label class="set-label">Group<select id="machine-group"></select></label>
+        <div id="machine-result" class="host-test-result"></div>
+        <div class="modal-actions">
+          <button id="machine-test" class="mini-btn" type="button">Test connection</button>
+          <button id="machine-add" class="primary" type="button">Add</button>
+        </div>
+        <div class="hint-line" style="margin-top:8px">
+          Under the hood this is an Ansible inventory entry — see “View Ansible inventory” for the exact form.
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="ai-modal" class="modal hidden">
     <div class="modal-card wide">
       <div class="modal-header">
