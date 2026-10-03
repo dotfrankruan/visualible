@@ -86,9 +86,14 @@
       <div id="tab-yaml" class="tab-panel">
         <div class="yaml-toolbar">
           <button id="btn-render-yaml" class="tool">Render YAML</button>
+          <button id="btn-edit-yaml" class="tool">Edit</button>
+          <button id="btn-apply-yaml" class="tool hidden">Apply to editor</button>
+          <button id="btn-cancel-yaml" class="tool hidden">Cancel</button>
           <span id="yaml-status" class="hint-line"></span>
         </div>
+        <div id="yaml-diagnostics"></div>
         <pre id="yaml-view" class="mono yaml"></pre>
+        <textarea id="yaml-editor" class="mono hidden" spellcheck="false"></textarea>
       </div>
     </div>
   </footer>

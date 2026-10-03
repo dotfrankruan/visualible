@@ -383,6 +383,34 @@ pre.yaml .yd { color: var(--warn); }
 
 .yaml-error { color: var(--err); font-size: 12px; white-space: pre-wrap; }
 
+.hidden { display: none !important; }
+
+#yaml-editor {
+  width: 100%;
+  height: calc(100% - 40px);
+  background: var(--bg-input);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  resize: none;
+}
+#yaml-editor:focus { outline: none; border-color: var(--accent); }
+
+#yaml-diagnostics { margin-bottom: 8px; }
+.diag {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-bottom: 4px;
+  border: 1px solid var(--border);
+}
+.diag.warning { border-color: var(--warn); color: var(--warn); }
+.diag.error { border-color: var(--err); color: var(--err); }
+.diag .path { font-family: var(--mono); opacity: 0.8; margin-right: 6px; }
+
 /* Project bar + modal */
 
 #project-bar { color: var(--text); font-size: 12px; }

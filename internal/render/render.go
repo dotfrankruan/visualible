@@ -6,6 +6,7 @@ package render
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/visualible/visualible/internal/ir"
 	"gopkg.in/yaml.v3"
@@ -198,5 +199,17 @@ func renderTask(t *ir.Task) *yamlTask {
 	}
 	add(t.IncludeTasks != "", "include_tasks", t.IncludeTasks)
 	add(t.ImportTasks != "", "import_tasks", t.ImportTasks)
+	// Imported keys we do not model are re-emitted verbatim (sorted for
+	// canonical output) so import → edit → export never loses data.
+	if len(t.Extras) > 0 {
+		keys := make([]string, 0, len(t.Extras))
+		for k := range t.Extras {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			yt.fields = append(yt.fields, taskField{key: k, value: t.Extras[k]})
+		}
+	}
 	return yt
 }

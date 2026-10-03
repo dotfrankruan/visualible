@@ -521,14 +521,18 @@ function textField(label, value, onCommit) {
 
 // ---------- YAML tab ----------
 
+let lastRenderedYaml = '';
+
 async function renderYamlView() {
   const pre = $('#yaml-view');
   const status = $('#yaml-status');
   pre.replaceChildren();
+  $('#yaml-diagnostics').replaceChildren();
   status.textContent = 'rendering…';
   status.className = 'hint-line';
   try {
     const { yaml } = await api.render(store.currentPlaybook());
+    lastRenderedYaml = yaml;
     renderYaml(pre, yaml);
     status.textContent = 'rendered from current editor state';
     store.ui.yamlDirty = false;
@@ -537,6 +541,68 @@ async function renderYamlView() {
     const msg = e.problems?.length ? e.problems.join('\n') : e.message;
     pre.append(el('div', { class: 'yaml-error' }, `Cannot render: ${msg}`));
   }
+}
+
+function enterYamlEdit() {
+  if (store.ui.yamlDirty) {
+    // Ensure the editor starts from the current state, not stale text.
+    api.render(store.currentPlaybook())
+      .then(({ yaml }) => { lastRenderedYaml = yaml; $('#yaml-editor').value = yaml; })
+      .catch(() => { $('#yaml-editor').value = lastRenderedYaml; });
+  }
+  $('#yaml-editor').value = lastRenderedYaml;
+  $('#yaml-editor').classList.remove('hidden');
+  $('#yaml-view').classList.add('hidden');
+  $('#btn-edit-yaml').classList.add('hidden');
+  $('#btn-render-yaml').classList.add('hidden');
+  $('#btn-apply-yaml').classList.remove('hidden');
+  $('#btn-cancel-yaml').classList.remove('hidden');
+  $('#yaml-status').textContent = 'editing — Apply parses the YAML back into the editor';
+}
+
+function exitYamlEdit() {
+  $('#yaml-editor').classList.add('hidden');
+  $('#yaml-view').classList.remove('hidden');
+  $('#btn-edit-yaml').classList.remove('hidden');
+  $('#btn-render-yaml').classList.remove('hidden');
+  $('#btn-apply-yaml').classList.add('hidden');
+  $('#btn-cancel-yaml').classList.add('hidden');
+  $('#yaml-status').textContent = '';
+}
+
+async function applyYamlEdit() {
+  const yaml = $('#yaml-editor').value;
+  const diagEl = $('#yaml-diagnostics');
+  diagEl.replaceChildren();
+  let res;
+  try {
+    res = await api.parseYaml(yaml, store.currentPlaybook()?.name ?? 'imported');
+  } catch (e) {
+    diagEl.append(el('div', { class: 'diag error' }, `Parse failed: ${e.message}`));
+    return;
+  }
+  const diags = res.diagnostics ?? [];
+  for (const d of diags) {
+    diagEl.append(el('div', { class: `diag ${d.severity}` },
+      el('span', { class: 'path' }, d.path), d.message));
+  }
+  if (diags.some((d) => d.severity === 'error')) {
+    diagEl.prepend(el('div', { class: 'diag error' },
+      'Errors must be resolved before this YAML can be applied.'));
+    return;
+  }
+  const warns = diags.length ? ` with ${diags.length} warning(s) (listed above)` : '';
+  if (!confirm(`Replace the current playbook${warns}? You can undo with Ctrl/Cmd+Z.`)) return;
+  store.commit('yaml apply', (proj) => {
+    // Keep the project's playbook slot; the imported playbook gets new IDs.
+    proj.playbooks[0] = res.playbook;
+  });
+  store.editor.selected = null;
+  exitYamlEdit();
+  store.ui.yamlDirty = true;
+  renderCanvas();
+  renderProps();
+  renderYamlView();
 }
 
 // ---------- Chrome (header/tabs/canvas wiring) ----------
@@ -592,6 +658,9 @@ function wireTabs() {
     });
   }
   $('#btn-render-yaml').addEventListener('click', renderYamlView);
+  $('#btn-edit-yaml').addEventListener('click', enterYamlEdit);
+  $('#btn-apply-yaml').addEventListener('click', applyYamlEdit);
+  $('#btn-cancel-yaml').addEventListener('click', exitYamlEdit);
 }
 
 boot();

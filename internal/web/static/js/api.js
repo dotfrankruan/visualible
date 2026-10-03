@@ -21,6 +21,7 @@ export const api = {
   modules: (refresh = false) => request(`/api/modules${refresh ? '?refresh=1' : ''}`),
   moduleDoc: (fqcn) => request(`/api/modules/${encodeURIComponent(fqcn)}`),
   render: (playbook) => request('/api/render', { method: 'POST', body: JSON.stringify({ playbook }) }),
+  parseYaml: (yaml, name) => request('/api/parse', { method: 'POST', body: JSON.stringify({ yaml, name }) }),
 
   projects: () => request('/api/projects'),
   createProject: (name, description) =>

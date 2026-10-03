@@ -83,6 +83,11 @@ type Task struct {
 	Until        string  `json:"until,omitempty"`
 	Retries      *int    `json:"retries,omitempty"`
 	Delay        *int    `json:"delay,omitempty"`
+
+	// Extras carries task keys from imported YAML that Visualible does not
+	// model explicitly. They are preserved verbatim and re-emitted on
+	// render, so import → edit → export never silently drops data.
+	Extras map[string]any `json:"extras,omitempty"`
 }
 
 // Inventory is a named set of groups and hosts.
