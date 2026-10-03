@@ -434,3 +434,59 @@ func TestManagerRejectsInvalidPlan(t *testing.T) {
 		t.Fatal("expected start rejection")
 	}
 }
+
+// TestPrepareTargetsTheSelectedPlaybook verifies multi-playbook projects:
+// a deployment must render exactly the playbook named by the plan, never
+// the first one in the project.
+func TestPrepareTargetsTheSelectedPlaybook(t *testing.T) {
+	runner := &fakeRunner{}
+	b := testBackend(runner)
+
+	project := testProject()
+	project.Playbooks = append(project.Playbooks, &ir.Playbook{
+		ID: "pb2", Name: "second playbook",
+		Plays: []*ir.Play{{
+			ID: "play2", Name: "second", Hosts: "db",
+			Tasks: []*ir.Task{
+				{ID: "t9", Name: "Unique second task", Module: "ansible.builtin.debug",
+					Args: map[string]any{"msg": "from-second-playbook"}},
+			},
+		}},
+	})
+
+	plan := testPlan()
+	plan.PlaybookID = "pb2"
+	prepared, err := b.Prepare(context.Background(), plan, project, credResolver())
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	defer b.Cleanup(context.Background(), prepared)
+
+	rendered, err := os.ReadFile(filepath.Join(prepared.Workspace, "playbook.yml"))
+	if err != nil {
+		t.Fatalf("read render: %v", err)
+	}
+	yaml := string(rendered)
+	if !strings.Contains(yaml, "from-second-playbook") {
+		t.Fatalf("selected playbook not rendered:\n%s", yaml)
+	}
+	if strings.Contains(yaml, "Install nginx") {
+		t.Fatalf("another playbook leaked into the deployment:\n%s", yaml)
+	}
+	if !strings.Contains(yaml, "hosts: db") {
+		t.Fatalf("wrong hosts rendered:\n%s", yaml)
+	}
+}
+
+// TestPrepareUnknownPlaybookIsRejected: a stale plan (playbook deleted
+// after the deployment was queued) fails validation instead of silently
+// deploying something else.
+func TestPrepareUnknownPlaybookIsRejected(t *testing.T) {
+	b := testBackend(&fakeRunner{})
+	plan := testPlan()
+	plan.PlaybookID = "gone"
+	err := b.Validate(context.Background(), plan, testProject())
+	if err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("expected a clear rejection, got %v", err)
+	}
+}

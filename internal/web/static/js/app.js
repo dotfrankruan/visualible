@@ -13,18 +13,23 @@ import { wireReview, renderReview } from './review.js';
 import { wireDeploy, renderDeploy } from './deploy.js';
 import { wireAI } from './ai.js';
 import { wireSettingsAI } from './settings.js';
+import { wireLibrary, renderLibrary, refreshProjects, relativeTime } from './library.js';
+import { wireProjectView, renderProject } from './project.js';
+import { wireDocumentDialogs, downloadPlaybook, duplicatePlaybook, saveAsPlaybook, openImportDialog } from './documents.js';
 
 const $ = (sel) => document.querySelector(sel);
 
 async function boot() {
   wireChrome();
-  wireProjectModal();
   wireBuild();
   wireTargets();
   wireReview();
   wireDeploy();
   wireAI();
   wireSettingsAI();
+  wireLibrary();
+  wireProjectView();
+  wireDocumentDialogs();
 
   store.on('editor', () => { renderBuild(); renderProjectBar(); });
   store.on('history', renderHistoryButtons);
@@ -38,9 +43,15 @@ async function boot() {
     renderAnsibleStatus(e);
   }
 
-  await Promise.all([openInitialProject(), loadSettings()]);
-  renderBuild();
+  await Promise.all([refreshProjects(), loadSettings()]);
   renderProjectBar();
+
+  // Deep links: /library, /projects/{id}, /projects/{id}/playbooks/{pid}
+  await routeFromLocation();
+  window.addEventListener('popstate', () => { routeFromLocation(); });
+  // Any module can request a view change; rendering and URL stay in sync
+  // here so there is one place that decides what is on screen.
+  document.addEventListener('visualible:navigate', () => { renderView(); pushRoute(); });
 }
 
 async function loadSettings() {
@@ -56,15 +67,107 @@ export function aiConfigured() {
 
 // ---------- Stage navigation ----------
 
+// goStage switches the workflow stage inside an open playbook.
 export function goStage(name) {
   document.querySelectorAll('.stage-btn').forEach((b) => b.classList.toggle('active', b.dataset.stage === name));
   document.querySelectorAll('.stage').forEach((s) => s.classList.remove('active'));
   $(`#stage-${name}`).classList.add('active');
+  store.ui.view = 'playbook';
   store.ui.stage = name;
+  renderProjectBar();
   if (name === 'build') renderBuild();
   if (name === 'targets') renderTargets();
   if (name === 'review') renderReview();
   if (name === 'deploy') renderDeploy();
+  pushRoute();
+}
+
+// showLibrary returns to the library home.
+export function showLibrary() {
+  if (store.editor.dirty && !confirm('You have unsaved changes. Leave this playbook?')) return;
+  store.ui.view = 'library';
+  store.ui.openProjectId = null;
+  renderView();
+  pushRoute();
+}
+
+// showProject returns to the playbook list of the open project.
+export function showProject() {
+  if (!store.editor.project) { showLibrary(); return; }
+  if (store.editor.dirty && !confirm('You have unsaved changes. Leave this playbook?')) return;
+  store.ui.view = 'project';
+  renderView();
+  pushRoute();
+}
+
+// renderView shows exactly one top-level view.
+function renderView() {
+  document.querySelectorAll('.stage').forEach((s) => s.classList.remove('active'));
+  document.querySelectorAll('.stage-btn').forEach((b) => b.classList.remove('active'));
+
+  const view = store.ui.view;
+  if (view === 'library') {
+    $('#view-library').classList.add('active');
+    $('#stage-nav').classList.add('hidden');
+    $('#editor-tools').classList.add('hidden');
+    renderProjectBar();
+    renderLibrary();
+    return;
+  }
+  if (view === 'project') {
+    $('#view-project').classList.add('active');
+    $('#stage-nav').classList.add('hidden');
+    $('#editor-tools').classList.add('hidden');
+    renderProjectBar();
+    renderProject();
+    return;
+  }
+  // Playbook open: the editor stages with their own navigation.
+  $('#stage-nav').classList.remove('hidden');
+  $('#editor-tools').classList.remove('hidden');
+  goStage(store.ui.stage || 'build');
+}
+
+// ---------- Routing (History API; no framework) ----------
+
+function pushRoute() {
+  const project = store.editor.project;
+  let path = '/library';
+  if (store.ui.view === 'project' && project) path = `/projects/${encodeURIComponent(project.id)}`;
+  if (store.ui.view === 'playbook' && project) {
+    const pb = store.currentPlaybook();
+    path = `/projects/${encodeURIComponent(project.id)}/playbooks/${encodeURIComponent(pb?.id ?? '')}`;
+  }
+  if (location.pathname !== path) history.pushState({ path }, '', path);
+}
+
+// routeFromLocation restores the view described by the URL. Playbook deep
+// links load the project from the server, so a refresh returns to the same
+// document.
+async function routeFromLocation() {
+  const parts = location.pathname.split('/').filter(Boolean);
+  if (parts[0] !== 'projects' || !parts[1]) {
+    store.ui.view = 'library';
+    renderView();
+    return;
+  }
+  const projectId = decodeURIComponent(parts[1]);
+  const playbookId = parts[2] === 'playbooks' && parts[3] ? decodeURIComponent(parts[3]) : null;
+  try {
+    if (store.editor.project?.id !== projectId) {
+      const project = await api.project(projectId);
+      store.loadProject(project, playbookId);
+    } else if (playbookId) {
+      store.selectPlaybook(playbookId);
+    }
+  } catch {
+    // Unknown project (deleted elsewhere): fall back to the library.
+    store.ui.view = 'library';
+    renderView();
+    return;
+  }
+  store.ui.view = playbookId ? 'playbook' : 'project';
+  renderView();
 }
 
 // ---------- Header chrome ----------
@@ -73,8 +176,28 @@ function wireChrome() {
   document.querySelectorAll('.stage-btn').forEach((b) =>
     b.addEventListener('click', () => goStage(b.dataset.stage)));
 
+  $('#btn-library').addEventListener('click', showLibrary);
+  $('#crumb-library').addEventListener('click', showLibrary);
+  $('#crumb-project').addEventListener('click', showProject);
+
   $('#btn-undo').addEventListener('click', store.undo);
   $('#btn-redo').addEventListener('click', store.redo);
+  $('#btn-export').addEventListener('click', () => {
+    const pb = store.currentPlaybook();
+    if (pb) downloadPlaybook(pb);
+  });
+  $('#btn-duplicate').addEventListener('click', async () => {
+    const pb = store.currentPlaybook();
+    if (!pb) return;
+    const copy = duplicatePlaybook(pb);
+    if (copy) {
+      store.selectPlaybook(copy.id);
+      await saveProject().catch(() => {});
+      renderProjectBar();
+      goStage('build');
+    }
+  });
+  $('#btn-saveas').addEventListener('click', () => saveAsPlaybook());
 
   // Escape closes whatever is open; Ctrl/Cmd+Enter submits AI intents.
   document.addEventListener('keydown', (e) => {
@@ -98,6 +221,14 @@ function wireChrome() {
     if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); store.undo(); }
     if (e.key === 'z' && e.shiftKey) { e.preventDefault(); store.redo(); }
     if (e.key === 's') { e.preventDefault(); saveProject(); }
+  });
+
+  // Import is available from the editor too: Cmd/Ctrl+Shift+I.
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'i') {
+      e.preventDefault();
+      openImportDialog({ target: 'project' });
+    }
   });
 
   const pill = $('#ansible-status');
@@ -165,10 +296,28 @@ function renderAnsiblePopover() {
 
 // ---------- Project bar / persistence ----------
 
+// renderProjectBar keeps the breadcrumb ("Library / Project / Playbook")
+// and the editor toolbar in sync with what is actually open, so the user
+// never has to wonder which document they are editing.
 function renderProjectBar() {
   const p = store.editor.project;
-  $('#project-name').textContent = p ? p.name : '—';
-  $('#project-dirty').style.display = store.editor.dirty ? '' : 'none';
+  const pb = store.currentPlaybook();
+  const inEditor = store.ui.view === 'playbook' && p && pb;
+
+  const crumbProject = $('#crumb-project');
+  const crumbPlaybook = $('#crumb-playbook');
+  const showProjectCrumb = store.ui.view !== 'library' && !!p;
+  crumbProject.classList.toggle('hidden', !showProjectCrumb);
+  crumbProject.textContent = p ? p.name : '—';
+  $('#crumb-project-sep').classList.toggle('hidden', !showProjectCrumb);
+
+  crumbPlaybook.classList.toggle('hidden', !inEditor);
+  $('#crumb-playbook-sep').classList.toggle('hidden', !inEditor);
+  if (inEditor) {
+    crumbPlaybook.textContent = pb.name + (store.editor.dirty ? ' •' : '');
+    crumbPlaybook.title = store.editor.dirty ? 'Unsaved changes' : 'Saved';
+  }
+  $('#project-dirty').classList.toggle('hidden', !store.editor.dirty);
   $('#btn-save').disabled = !store.editor.dirty;
 }
 
@@ -188,120 +337,21 @@ export async function saveProject() {
   }
 }
 
-async function openInitialProject() {
-  try {
-    const { projects } = await api.projects();
-    store.server.projects = projects;
-    if (projects.length) {
-      const p = await api.project(projects[0].id);
-      store.loadProject(p);
-      return;
-    }
-  } catch { /* storage unavailable: fall through to a fresh local project */ }
-  store.loadProject(freshProject());
-}
-
+// freshProject creates an in-memory project for the "start from scratch"
+// path before anything has been persisted.
 export function freshProject() {
   return {
     id: store.newId('proj'),
     name: 'Untitled project',
     playbooks: [{
       id: store.newId('pb'),
-      name: 'playbook',
+      name: 'My automation',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       plays: [{ id: store.newId('play'), name: 'My automation', hosts: 'all', tasks: [], handlers: [] }],
     }],
     inventories: [],
   };
-}
-
-function wireProjectModal() {
-  $('#btn-save').addEventListener('click', saveProject);
-  $('#btn-projects').addEventListener('click', openProjectModal);
-  $('#project-modal-close').addEventListener('click', closeProjectModal);
-  $('#project-modal').addEventListener('click', (e) => {
-    if (e.target.id === 'project-modal') closeProjectModal();
-  });
-  $('#project-new-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const name = $('#project-new-name').value.trim();
-    if (!name) return;
-    try {
-      const p = await api.createProject(name, '');
-      store.loadProject(p);
-      closeProjectModal();
-      renderBuild();
-    } catch (err) {
-      alert(`Create failed: ${err.message}`);
-    }
-  });
-}
-
-async function openProjectModal() {
-  $('#project-modal').classList.remove('hidden');
-  $('#project-new-name').value = '';
-  await refreshProjectList();
-}
-
-function closeProjectModal() {
-  $('#project-modal').classList.add('hidden');
-}
-
-async function refreshProjectList() {
-  const listEl = $('#project-list');
-  listEl.replaceChildren(el('div', { class: 'empty-state' }, 'Loading…'));
-  try {
-    const { projects } = await api.projects();
-    store.server.projects = projects;
-    listEl.replaceChildren();
-    if (!projects.length) {
-      listEl.append(el('div', { class: 'empty-state' }, 'No projects yet. Create one below.'));
-      return;
-    }
-    for (const m of projects) {
-      const isCurrent = store.editor.project?.id === m.id;
-      listEl.append(el('div', { class: 'project-row' },
-        el('div', { class: 'project-info' },
-          el('div', { class: 'project-title' }, m.name + (isCurrent ? ' (open)' : '')),
-          el('div', { class: 'project-meta' }, `updated ${new Date(m.updatedAt).toLocaleString()}`)),
-        el('button', {
-          class: 'mini-btn', disabled: isCurrent,
-          onclick: () => openProject(m.id),
-        }, 'Open'),
-        el('button', {
-          class: 'mini-btn danger',
-          onclick: () => deleteProject(m.id, m.name),
-        }, 'Delete'),
-      ));
-    }
-  } catch (e) {
-    listEl.replaceChildren(el('div', { class: 'empty-state' }, `Could not load projects: ${e.message}`));
-  }
-}
-
-async function openProject(id) {
-  if (store.editor.dirty && !confirm('Discard unsaved changes?')) return;
-  try {
-    const p = await api.project(id);
-    store.loadProject(p);
-    renderBuild();
-    closeProjectModal();
-  } catch (e) {
-    alert(`Open failed: ${e.message}`);
-  }
-}
-
-async function deleteProject(id, name) {
-  if (!confirm(`Delete project “${name}”? This cannot be undone.`)) return;
-  try {
-    await api.deleteProject(id);
-    if (store.editor.project?.id === id) {
-      store.loadProject(freshProject());
-      renderBuild();
-    }
-    await refreshProjectList();
-  } catch (e) {
-    alert(`Delete failed: ${e.message}`);
-  }
 }
 
 boot();

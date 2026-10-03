@@ -322,8 +322,11 @@ async function applyYamlEdit() {
   }
   const warns = diags.length ? ` with ${diags.length} warning(s) (listed above)` : '';
   if (!confirm(`Replace the current automation${warns}? You can undo with Ctrl/Cmd+Z.`)) return;
+  const targetId = store.currentPlaybook()?.id;
   store.commit('yaml apply', (proj) => {
-    proj.playbooks[0] = res.playbook;
+    const i = (proj.playbooks ?? []).findIndex((pb) => pb.id === targetId);
+    if (i >= 0) proj.playbooks[i] = { ...res.playbook, id: targetId };
+    else if (proj.playbooks?.length) proj.playbooks[0] = res.playbook;
   });
   store.editor.selected = null;
   exitYamlEdit();

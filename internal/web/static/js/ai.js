@@ -509,8 +509,13 @@ async function applySelected() {
   btn.disabled = true;
   try {
     const { playbook } = await api.aiMerge(basePlaybook, proposal.proposedIr, ids);
+    // Replace the document the proposal was generated for, keeping its
+    // identity so the user stays in the same playbook after applying.
+    const targetId = store.currentPlaybook()?.id;
     store.commit('ai apply', (proj) => {
-      proj.playbooks[0] = playbook;
+      const i = (proj.playbooks ?? []).findIndex((pb) => pb.id === targetId);
+      if (i >= 0) proj.playbooks[i] = { ...playbook, id: targetId, name: proj.playbooks[i].name };
+      else if (proj.playbooks?.length) proj.playbooks[0] = playbook;
     });
     store.editor.selected = null;
     closeAI();

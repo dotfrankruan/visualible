@@ -8,12 +8,18 @@
 </head>
 <body>
   <header id="app-header">
-    <div class="brand">Visualible</div>
-    <span id="project-bar" title="Current project">
-      <span id="project-name">—</span><span id="project-dirty" class="dirty-dot" title="Unsaved changes">●</span>
-    </span>
+    <button id="btn-library" class="brand-button" title="Back to your library">Visualible</button>
 
-    <nav id="stage-nav" aria-label="Workflow stages">
+    <nav id="breadcrumb" aria-label="Location">
+      <button class="crumb" id="crumb-library">Library</button>
+      <span class="crumb-sep hidden" id="crumb-project-sep">/</span>
+      <button class="crumb hidden" id="crumb-project">—</button>
+      <span class="crumb-sep hidden" id="crumb-playbook-sep">/</span>
+      <span class="crumb current hidden" id="crumb-playbook">—</span>
+      <span id="project-dirty" class="dirty-dot hidden" title="Unsaved changes">●</span>
+    </nav>
+
+    <nav id="stage-nav" class="hidden" aria-label="Workflow stages">
       <button class="stage-btn active" data-stage="build">Build</button>
       <button class="stage-btn" data-stage="targets">Targets</button>
       <button class="stage-btn" data-stage="review">Review</button>
@@ -22,16 +28,58 @@
 
     <div class="spacer"></div>
 
+    <span id="editor-tools" class="hidden">
+      <button id="btn-save" class="tool" disabled title="Save (Ctrl/Cmd+S)">Save</button>
+      <button id="btn-export" class="tool" title="Download this playbook as Ansible YAML">Export</button>
+      <button id="btn-duplicate" class="tool" title="Create an independent copy of this playbook">Duplicate</button>
+      <button id="btn-saveas" class="tool" title="Save as a new playbook">Save as…</button>
+      <button id="btn-undo" class="tool" title="Undo (Ctrl/Cmd+Z)" disabled>↶</button>
+      <button id="btn-redo" class="tool" title="Redo (Ctrl/Cmd+Shift+Z)" disabled>↷</button>
+    </span>
+
     <button id="ansible-status" class="status-pill" title="Ansible status — click for details">…</button>
-    <button id="btn-save" class="tool" disabled title="Save project (Ctrl/Cmd+S)">Save</button>
-    <button id="btn-undo" class="tool" title="Undo (Ctrl/Cmd+Z)" disabled>↶</button>
-    <button id="btn-redo" class="tool" title="Redo (Ctrl/Cmd+Shift+Z)" disabled>↷</button>
-    <button id="btn-ai" class="tool" title="Describe what you want to automate">✨ Ask AI</button>
-    <button id="btn-projects" class="tool" title="Open / create projects">Projects</button>
+    <button id="btn-ai" class="tool" title="Describe what you want to change">✨ Ask AI</button>
     <button id="btn-settings" class="tool" title="Settings">Settings</button>
   </header>
 
   <div id="ansible-popover" class="popover hidden"></div>
+
+  <!-- ============================= LIBRARY ============================= -->
+  <main id="view-library" class="stage">
+    <div id="library-layout">
+      <div class="stage-head library-head">
+        <div>
+          <h2>Library</h2>
+          <p class="stage-sub">Your automation projects and playbooks.</p>
+        </div>
+        <div class="library-tools">
+          <input id="library-search" type="search" placeholder="Search library…" autocomplete="off">
+          <button id="library-new-project" class="primary">+ New project</button>
+          <button id="library-import" class="mini-btn">Import playbook</button>
+        </div>
+      </div>
+      <div id="library-main" class="scroll"></div>
+    </div>
+  </main>
+
+  <!-- ============================= PROJECT ============================= -->
+  <main id="view-project" class="stage">
+    <div id="project-layout">
+      <div class="stage-head library-head">
+        <div>
+          <h2 id="project-title">—</h2>
+          <p class="stage-sub" id="project-subtitle"></p>
+        </div>
+        <div class="library-tools">
+          <button id="project-new-playbook" class="primary">+ New playbook</button>
+          <button id="project-import" class="mini-btn">Import YAML</button>
+          <button id="project-export-all" class="mini-btn">Export all</button>
+          <button id="project-rename" class="mini-btn">Rename project</button>
+        </div>
+      </div>
+      <div id="project-main" class="scroll"></div>
+    </div>
+  </main>
 
   <!-- ============================== BUILD ============================== -->
   <main id="stage-build" class="stage active">
@@ -217,17 +265,19 @@
   </main>
 
   <!-- ============================= MODALS ============================== -->
-  <div id="project-modal" class="modal hidden">
+  <div id="doc-modal" class="modal hidden">
     <div class="modal-card">
       <div class="modal-header">
-        <span>Projects</span>
-        <button id="project-modal-close" class="mini-btn">✕</button>
+        <span id="doc-modal-title">New</span>
+        <button id="doc-modal-close" class="mini-btn">✕</button>
       </div>
-      <div id="project-list" class="scroll"></div>
-      <form id="project-new-form">
-        <input id="project-new-name" type="text" placeholder="New project name" required>
-        <button class="primary" type="submit">Create</button>
-      </form>
+      <div class="modal-body">
+        <div id="doc-modal-body"></div>
+        <div id="doc-diagnostics"></div>
+        <div class="modal-actions">
+          <button id="doc-modal-submit" class="primary">Create</button>
+        </div>
+      </div>
     </div>
   </div>
 

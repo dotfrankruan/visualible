@@ -74,6 +74,44 @@ Run the test suite (no network or Ansible required):
 go test ./...
 ```
 
+## Library → Project → Playbook → Editor
+
+Visualible keeps your work in a **Library**, not behind a settings dialog:
+
+```text
+Library                 your projects
+  └── Project           a workspace (targets, credentials, playbooks)
+       ├── Playbook     an independently editable automation document
+       └── Playbook
+```
+
+- **Library** shows recent playbooks and all projects with playbook counts
+  and modified times, plus search over project names, playbook names and
+  descriptions. First run offers *New project*, *Import Ansible YAML* and —
+  only when a provider is configured — *Describe your first automation*.
+- **Project** lists its playbooks with step counts and modified times.
+  Every document operation is visible: open, rename, duplicate, export,
+  delete, new playbook, import YAML. Deleting makes the consequence
+  explicit: it removes the document from Visualible and does not undo
+  machines already configured with it.
+- **Editor** shows a breadcrumb (`Library / Homelab / Configure nginx •`)
+  so the open document is never ambiguous, with Save, Export, Duplicate and
+  Save as… in the toolbar. Undo/redo and explicit save with a dirty
+  indicator are unchanged: nothing is saved behind your back.
+- Each playbook is a document with its own name, description and
+  timestamps; a project holds as many as you like. Everything you author is
+  exportable as **standard Ansible YAML** (`configure-nginx.yml`) that runs
+  without Visualible — the export contains no credentials and no
+  Visualible-only metadata, and exports of a dirty document render the
+  working state you see on screen.
+- AI and Deploy are always scoped to the **open playbook**; the Deploy view
+  names the project, playbook and targets before you run anything.
+
+Old single-playbook projects keep working: on load, playbooks missing the
+newer metadata are backfilled from the project's timestamps, so existing
+IDs, IR, targets, credential references and deployment history are
+preserved.
+
 ## The workflow
 
 Visualible is organized around intent, not Ansible vocabulary:
@@ -221,7 +259,8 @@ Go packages:
 | `internal/ansible` | Local installation detection, `ansible-doc` client (structured exec, no shell), schema normalization, cache. |
 | `internal/deploy` | `Backend` interface + capabilities, event normalization, deployment manager. |
 | `internal/deploy` (Ansible SSH) | The one real v0.1 backend: workspace render, credential materialization, preflight, process-group exec, event tailing. |
-| `internal/store` | SQLite (pure Go): projects as IR documents, encrypted credentials, deployments, settings. |
+| `internal/artifact` | Portable exports: standard Ansible YAML with safe, human filenames. Extension point for future bundles (ZIP, Git, S3, roles). |
+| `internal/store` | SQLite (pure Go): projects as IR documents (multiple playbooks each), encrypted credentials, deployments, settings, migration of older documents. |
 | `internal/logging` | Leveled console logger (DEBUG/INFO/WARN/ERROR/FATAL), text or JSON, with secret redaction. |
 | `internal/action` | Curated beginner Actions: Action → IR generation (incl. compound) and strict IR → Action recognition. Presentation layer only. |
 | `internal/ai` | Provider abstraction + OpenAI-compatible adapter; intent → validated IR proposals with rationale. |
@@ -263,6 +302,7 @@ POST   /api/actions/recognize           IR tasks → curated labels or Advanced
 GET    /api/modules[?refresh=1]         full module catalog from ansible-doc
 GET    /api/modules/{fqcn}              normalized schema → dynamic form
 POST   /api/render | /api/parse         IR → YAML | YAML → IR + diagnostics
+GET    /api/projects/{id}/playbooks/{pid}/export/yaml   download standard YAML
 POST   /api/render/inventory            IR inventory → Ansible inventory YAML
 GET/POST/PUT/DELETE /api/projects/...   project persistence (IR documents)
 GET/POST/DELETE /api/credentials        write-only, encrypted credentials

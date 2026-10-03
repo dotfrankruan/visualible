@@ -76,6 +76,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/projects/{id}", s.handleProjectGet)
 	s.mux.HandleFunc("PUT /api/projects/{id}", s.handleProjectPut)
 	s.mux.HandleFunc("DELETE /api/projects/{id}", s.handleProjectDelete)
+	s.mux.HandleFunc("GET /api/projects/{id}/playbooks/{playbookId}/export/{format}", s.handlePlaybookExport)
 
 	s.mux.HandleFunc("GET /api/credentials", s.handleCredentialList)
 	s.mux.HandleFunc("POST /api/credentials", s.handleCredentialCreate)
@@ -102,8 +103,11 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/deployments/preflight", s.handlePreflight)
 
 	// Embedded frontend; anything not under /api falls through to static.
+	// Routes such as /projects/{id}/playbooks/{pid} are client-side, so an
+	// unknown path serves the app shell and the browser restores the view —
+	// a refresh returns to the same playbook.
 	if static, err := webfs.Static(); err == nil {
-		s.mux.Handle("GET /", http.FileServer(http.FS(static)))
+		s.mux.Handle("GET /", spaHandler(static))
 	} else {
 		logging.Error("embedded frontend unavailable", "err", err)
 	}

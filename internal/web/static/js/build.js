@@ -72,13 +72,13 @@ async function refreshRecognitions() {
 
 function wirePlayFields() {
   $('#play-name').addEventListener('change', (e) => {
-    store.commit('play', (proj) => { proj.playbooks[0].plays[0].name = e.target.value; });
+    store.commit('play', (proj) => { const play = store.mutatePlay(proj); if (play) play.name = e.target.value; });
   });
   $('#play-hosts').addEventListener('change', (e) => {
-    store.commit('play', (proj) => { proj.playbooks[0].plays[0].hosts = e.target.value; });
+    store.commit('play', (proj) => { const play = store.mutatePlay(proj); if (play) play.hosts = e.target.value; });
   });
   $('#play-become').addEventListener('change', (e) => {
-    store.commit('play', (proj) => { proj.playbooks[0].plays[0].become = e.target.checked || undefined; });
+    store.commit('play', (proj) => { const play = store.mutatePlay(proj); if (play) play.become = e.target.checked || undefined; });
   });
 }
 
@@ -319,7 +319,8 @@ async function addTaskFromModule(kind) {
   } catch { /* schema is optional at add time */ }
 
   store.commit(`add ${kind}`, (proj) => {
-    const play = proj.playbooks[0].plays[0];
+    const play = store.mutatePlay(proj);
+    if (!play) return;
     if (kind === 'handler') {
       play.handlers = play.handlers ?? [];
       play.handlers.push(task);
@@ -446,7 +447,9 @@ function taskListOf(play, kind) {
 
 function moveTask(id, kind, delta) {
   store.commit('reorder', (proj) => {
-    const list = taskListOf(proj.playbooks[0].plays[0], kind);
+    const play = store.mutatePlay(proj);
+    if (!play) return;
+    const list = taskListOf(play, kind);
     const i = list.findIndex((t) => t.id === id);
     const j = i + delta;
     if (i < 0 || j < 0 || j >= list.length) return;
@@ -456,7 +459,9 @@ function moveTask(id, kind, delta) {
 
 function moveTaskToPosition(srcId, kind, targetIndex) {
   store.commit('reorder', (proj) => {
-    const list = taskListOf(proj.playbooks[0].plays[0], kind);
+    const play = store.mutatePlay(proj);
+    if (!play) return;
+    const list = taskListOf(play, kind);
     const from = list.findIndex((t) => t.id === srcId);
     if (from < 0) return;
     const [moved] = list.splice(from, 1);
@@ -467,7 +472,9 @@ function moveTaskToPosition(srcId, kind, targetIndex) {
 
 function deleteTask(id, kind) {
   store.commit('delete', (proj) => {
-    const list = taskListOf(proj.playbooks[0].plays[0], kind);
+    const play = store.mutatePlay(proj);
+    if (!play) return;
+    const list = taskListOf(play, kind);
     const i = list.findIndex((t) => t.id === id);
     if (i >= 0) list.splice(i, 1);
   });

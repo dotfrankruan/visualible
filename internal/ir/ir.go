@@ -20,11 +20,29 @@ type Project struct {
 }
 
 // Playbook is an ordered collection of plays, rendered as a single
-// Ansible playbook YAML document (a YAML list of plays).
+// Ansible playbook YAML document (a YAML list of plays). It is an
+// independently editable document inside a Project — the unit users see
+// in the Library.
 type Playbook struct {
-	ID    string  `json:"id"`
-	Name  string  `json:"name"`
-	Plays []*Play `json:"plays"`
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description,omitempty"`
+	Plays       []*Play   `json:"plays"`
+	CreatedAt   time.Time `json:"createdAt,omitempty"`
+	UpdatedAt   time.Time `json:"updatedAt,omitempty"`
+}
+
+// Touch stamps the document's modification time.
+func (pb *Playbook) Touch(at time.Time) { pb.UpdatedAt = at.UTC() }
+
+// StepCount counts the automation steps shown for a playbook in the
+// Library (tasks plus handlers across its plays).
+func (pb *Playbook) StepCount() int {
+	n := 0
+	for _, p := range pb.Plays {
+		n += len(p.Tasks) + len(p.Handlers) + len(p.PreTasks) + len(p.PostTasks)
+	}
+	return n
 }
 
 // Play maps to an Ansible play.

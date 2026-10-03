@@ -38,9 +38,19 @@ function renderPreflight() {
   const wrap = $('#deploy-preflight');
   wrap.replaceChildren();
   const proj = store.editor.project;
+  const pb = store.currentPlaybook();
   const inv = proj?.inventories?.[0];
   const hosts = inv ? countHosts(inv) : 0;
   const tasks = store.currentPlay()?.tasks ?? [];
+
+  // Which document will run must never be ambiguous.
+  wrap.append(el('div', { class: 'deploy-identity' },
+    el('div', {}, el('span', { class: 'di-label' }, 'Project'), ' ',
+      el('span', { class: 'di-value' }, proj?.name ?? '—')),
+    el('div', {}, el('span', { class: 'di-label' }, 'Playbook'), ' ',
+      el('span', { class: 'di-value' }, pb?.name ?? '—')),
+    el('div', {}, el('span', { class: 'di-label' }, 'Targets'), ' ',
+      el('span', { class: 'di-value' }, inv?.name ?? '—'))));
 
   wrap.append(preflightRow(hosts > 0, 'Targets',
     hosts ? `${hosts} machine(s)` : 'none yet — add machines on the Targets page'));
@@ -150,7 +160,7 @@ async function startDeployment(e) {
   if (!proj) return;
   const plan = {
     projectId: proj.id,
-    playbookId: proj.playbooks[0].id,
+    playbookId: store.currentPlaybook()?.id,
     inventoryId: proj.inventories[0].id,
     check: $('#deploy-check').checked,
     diff: $('#deploy-diff').checked,

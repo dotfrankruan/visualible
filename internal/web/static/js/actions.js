@@ -56,7 +56,8 @@ function applyGenerated(gen) {
   const handlers = gen.handlers ?? [];
   if (!tasks.length && !handlers.length) return;
   store.commit('add action', (proj) => {
-    const play = proj.playbooks[0].plays[0];
+    const play = store.mutatePlay(proj);
+    if (!play) return;
     play.tasks = play.tasks ?? [];
     play.tasks.push(...tasks);
     if (handlers.length) {

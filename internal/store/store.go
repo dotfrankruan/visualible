@@ -182,16 +182,102 @@ CREATE INDEX IF NOT EXISTS idx_projects_name ON projects(name);
 // ErrNotFound is returned when an entity does not exist.
 var ErrNotFound = errors.New("not found")
 
-// ProjectMeta is the lightweight listing view of a project.
+// ProjectMeta is the lightweight listing view of a project, including the
+// playbook summaries the Library needs to render without loading every
+// document in full.
 type ProjectMeta struct {
+	ID          string            `json:"id"`
+	Name        string            `json:"name"`
+	Description string            `json:"description,omitempty"`
+	CreatedAt   time.Time         `json:"createdAt"`
+	UpdatedAt   time.Time         `json:"updatedAt"`
+	Playbooks   []PlaybookSummary `json:"playbooks"`
+}
+
+// PlaybookSummary describes one playbook inside a project.
+type PlaybookSummary struct {
 	ID          string    `json:"id"`
 	Name        string    `json:"name"`
 	Description string    `json:"description,omitempty"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	Steps       int       `json:"steps"`
+	CreatedAt   time.Time `json:"createdAt,omitempty"`
+	UpdatedAt   time.Time `json:"updatedAt,omitempty"`
 }
 
 const timeFormat = time.RFC3339Nano
+
+// playbookStamp remembers a stored playbook's content and modification
+// time so an unchanged document keeps its original timestamp.
+type playbookStamp struct {
+	content   string
+	updatedAt time.Time
+}
+
+// canonicalPlaybook renders a playbook for content comparison, ignoring
+// the modification timestamp itself (which is what we are deciding).
+func canonicalPlaybook(pb *ir.Playbook) string {
+	data, err := json.Marshal(pb)
+	if err != nil {
+		return ""
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return string(data)
+	}
+	delete(fields, "updatedAt")
+	canonical, err := json.Marshal(fields)
+	if err != nil {
+		return string(data)
+	}
+	return string(canonical)
+}
+
+// playbookTimestamps extracts per-playbook stamps from a stored project
+// document. The raw JSON is kept so content comparison ignores formatting.
+func playbookTimestamps(data string) map[string]playbookStamp {
+	out := map[string]playbookStamp{}
+	if data == "" {
+		return out
+	}
+	var doc struct {
+		Playbooks []struct {
+			ID        string          `json:"id"`
+			UpdatedAt time.Time       `json:"updatedAt"`
+			Raw       json.RawMessage `json:"-"`
+		} `json:"playbooks"`
+	}
+	if err := json.Unmarshal([]byte(data), &doc); err != nil {
+		return out
+	}
+	// Re-parse each playbook individually to compare content exactly,
+	// normalising away the updatedAt field itself.
+	var generic struct {
+		Playbooks []json.RawMessage `json:"playbooks"`
+	}
+	if err := json.Unmarshal([]byte(data), &generic); err != nil {
+		return out
+	}
+	for _, raw := range generic.Playbooks {
+		var meta struct {
+			ID        string    `json:"id"`
+			UpdatedAt time.Time `json:"updatedAt"`
+		}
+		if err := json.Unmarshal(raw, &meta); err != nil || meta.ID == "" {
+			continue
+		}
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &fields); err != nil {
+			continue
+		}
+		delete(fields, "updatedAt")
+		canonical, err := json.Marshal(fields)
+		if err != nil {
+			continue
+		}
+		out[meta.ID] = playbookStamp{content: string(canonical), updatedAt: meta.UpdatedAt}
+	}
+	return out
+}
 
 // ListProjects returns metadata for all projects, newest first.
 func (s *Store) ListProjects(ctx context.Context) ([]ProjectMeta, error) {
@@ -208,14 +294,42 @@ func (s *Store) ListProjects(ctx context.Context) ([]ProjectMeta, error) {
 		if err := rows.Scan(&m.ID, &m.Name, &data, &created, &updated); err != nil {
 			return nil, err
 		}
-		// Description lives inside the IR document; extract cheaply.
+		// Description and playbook summaries live inside the IR document.
 		var doc struct {
 			Description string `json:"description"`
+			Playbooks   []struct {
+				ID          string    `json:"id"`
+				Name        string    `json:"name"`
+				Description string    `json:"description,omitempty"`
+				CreatedAt   time.Time `json:"createdAt"`
+				UpdatedAt   time.Time `json:"updatedAt"`
+				Plays       []struct {
+					Tasks     []any `json:"tasks"`
+					Handlers  []any `json:"handlers"`
+					PreTasks  []any `json:"preTasks"`
+					PostTasks []any `json:"postTasks"`
+				} `json:"plays"`
+			} `json:"playbooks"`
 		}
 		_ = json.Unmarshal([]byte(data), &doc)
 		m.Description = doc.Description
 		m.CreatedAt, _ = time.Parse(timeFormat, created)
 		m.UpdatedAt, _ = time.Parse(timeFormat, updated)
+		m.Playbooks = make([]PlaybookSummary, 0, len(doc.Playbooks))
+		for _, pb := range doc.Playbooks {
+			steps := 0
+			for _, p := range pb.Plays {
+				steps += len(p.Tasks) + len(p.Handlers) + len(p.PreTasks) + len(p.PostTasks)
+			}
+			m.Playbooks = append(m.Playbooks, PlaybookSummary{
+				ID:          pb.ID,
+				Name:        pb.Name,
+				Description: pb.Description,
+				Steps:       steps,
+				CreatedAt:   pb.CreatedAt,
+				UpdatedAt:   pb.UpdatedAt,
+			})
+		}
 		out = append(out, m)
 	}
 	return out, rows.Err()
@@ -235,7 +349,39 @@ func (s *Store) GetProject(ctx context.Context, id string) (*ir.Project, error) 
 	if err := json.Unmarshal([]byte(data), &p); err != nil {
 		return nil, fmt.Errorf("corrupt project %s: %w", id, err)
 	}
+	normalizeProject(&p)
 	return &p, nil
+}
+
+// normalizeProject backfills metadata added after projects were first
+// persisted. Existing documents keep their IDs, IR, inventories and
+// timestamps: a project saved before playbooks carried their own metadata
+// simply gains derived values instead of being rejected or rewritten.
+func normalizeProject(p *ir.Project) {
+	fallback := p.UpdatedAt
+	if fallback.IsZero() {
+		fallback = p.CreatedAt
+	}
+	if fallback.IsZero() {
+		fallback = time.Now().UTC()
+	}
+	for _, pb := range p.Playbooks {
+		if pb == nil {
+			continue
+		}
+		if pb.CreatedAt.IsZero() {
+			pb.CreatedAt = fallback
+		}
+		if pb.UpdatedAt.IsZero() {
+			pb.UpdatedAt = pb.CreatedAt
+		}
+	}
+	if p.Playbooks == nil {
+		p.Playbooks = []*ir.Playbook{}
+	}
+	if p.Inventories == nil {
+		p.Inventories = []*ir.Inventory{}
+	}
 }
 
 // SaveProject inserts or replaces a project. The project must pass IR
@@ -246,7 +392,9 @@ func (s *Store) SaveProject(ctx context.Context, p *ir.Project) error {
 	}
 	now := time.Now().UTC()
 	var created string
-	err := s.db.QueryRowContext(ctx, `SELECT created_at FROM projects WHERE id = ?`, p.ID).Scan(&created)
+	var previous string
+	err := s.db.QueryRowContext(ctx, `SELECT created_at, data FROM projects WHERE id = ?`, p.ID).
+		Scan(&created, &previous)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		p.CreatedAt = now
@@ -254,6 +402,25 @@ func (s *Store) SaveProject(ctx context.Context, p *ir.Project) error {
 		return err
 	default:
 		p.CreatedAt, _ = time.Parse(timeFormat, created)
+	}
+
+	// Playbook modification times drive the Library's "modified … ago".
+	// Only documents whose content actually changed are stamped, so opening
+	// and saving an unchanged project does not rewrite history.
+	previousTimes := playbookTimestamps(previous)
+	for i, pb := range p.Playbooks {
+		if pb == nil {
+			continue
+		}
+		if pb.CreatedAt.IsZero() {
+			pb.CreatedAt = p.CreatedAt
+		}
+		if prev, ok := previousTimes[pb.ID]; ok && prev.content == canonicalPlaybook(pb) {
+			pb.UpdatedAt = prev.updatedAt
+			continue
+		}
+		pb.UpdatedAt = now
+		_ = i
 	}
 	p.UpdatedAt = now
 
