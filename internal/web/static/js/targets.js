@@ -61,8 +61,41 @@ function newHost(name) {
 }
 
 export async function renderTargets() {
-  renderGroups();
+  // Order matters: machine rows resolve their credential reference against
+  // the loaded credential list. Rendering first would show a saved
+  // reference as "(no credential)" — and let an unrelated edit wipe it.
   await renderCredentials();
+  renderGroups();
+}
+
+// credentialsLoaded reports whether the credential list has been fetched.
+function credentialsLoaded() {
+  return Array.isArray(store.server.credentials);
+}
+
+// credentialOptions builds a dropdown that always contains the currently
+// referenced credential, even if the list has not loaded yet or the
+// credential was removed elsewhere. A stored reference can therefore never
+// silently render as "no credential".
+function credentialOptions(selectedID) {
+  const creds = store.server.credentials ?? [];
+  const options = [{ id: '', label: '(no credential)' }];
+  for (const c of creds) options.push({ id: c.id, label: `${c.name} (${c.kind})` });
+  if (selectedID && !options.some((o) => o.id === selectedID)) {
+    options.push({ id: selectedID, label: `(unknown credential ${selectedID})` });
+  }
+  return options;
+}
+
+function buildCredentialSelect(selectedID, onChange) {
+  const sel = el('select', { title: 'SSH credential (stored encrypted, never exported)' });
+  for (const o of credentialOptions(selectedID)) {
+    const opt = el('option', { value: o.id }, o.label);
+    if (o.id === (selectedID ?? '')) opt.selected = true;
+    sel.append(opt);
+  }
+  sel.addEventListener('change', () => onChange(sel.value));
+  return sel;
 }
 
 async function renderInventoryYaml() {
@@ -158,7 +191,6 @@ function groupCard(inv, g) {
 }
 
 function hostCard(inv, group, h) {
-  const creds = store.server.credentials ?? [];
   const row = el('div', { class: 'inv-host' });
 
   const mk = (placeholder, value, apply, opts = {}) => {
@@ -170,15 +202,8 @@ function hostCard(inv, group, h) {
     return input;
   };
 
-  const credSelect = el('select', { title: 'SSH credential (stored encrypted, never exported)' });
-  credSelect.append(el('option', { value: '' }, '(no credential)'));
-  for (const c of creds) {
-    const o = el('option', { value: c.id }, `${c.name} (${c.kind})`);
-    if (h.credentialId === c.id) o.selected = true;
-    credSelect.append(o);
-  }
-  credSelect.addEventListener('change', () => {
-    store.commit('inv', () => { h.credentialId = credSelect.value || undefined; });
+  const credSelect = buildCredentialSelect(h.credentialId, (value) => {
+    store.commit('inv', () => { h.credentialId = value || undefined; });
   });
 
   const testBtn = el('button', {
@@ -259,6 +284,15 @@ function openMachineModal(group) {
   $('#machine-user').value = 'root';
   $('#machine-port').value = '22';
 
+  // Ensure the credential list is present before offering the choice.
+  if (!credentialsLoaded()) {
+    api.credentials().then(({ credentials }) => {
+      store.server.credentials = credentials;
+      const sel = $('#machine-cred');
+      sel.replaceChildren(el('option', { value: '' }, 'Default SSH keys / agent'));
+      for (const c of credentials) sel.append(el('option', { value: c.id }, `${c.name} (${c.kind})`));
+    }).catch(() => {});
+  }
   const credSel = $('#machine-cred');
   credSel.replaceChildren(el('option', { value: '' }, 'Default SSH keys / agent'));
   for (const c of store.server.credentials ?? []) {

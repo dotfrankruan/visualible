@@ -48,9 +48,14 @@ type CredentialMeta struct {
 type secretBox struct {
 	keyPath string
 	aead    cipher.AEAD
+	// keyCreated records that this process generated the key file because
+	// it was missing. Existing credentials become undecryptable in that
+	// case, so the caller must report it loudly.
+	keyCreated bool
 }
 
 func openSecretBox(keyPath string) (*secretBox, error) {
+	created := false
 	key, err := os.ReadFile(keyPath)
 	if errors.Is(err, os.ErrNotExist) {
 		key = make([]byte, 32)
@@ -60,6 +65,7 @@ func openSecretBox(keyPath string) (*secretBox, error) {
 		if err := os.WriteFile(keyPath, key, 0o600); err != nil {
 			return nil, fmt.Errorf("write secret key: %w", err)
 		}
+		created = true
 	} else if err != nil {
 		return nil, err
 	} else if len(key) != 32 {
@@ -69,7 +75,7 @@ func openSecretBox(keyPath string) (*secretBox, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &secretBox{keyPath: keyPath, aead: aead}, nil
+	return &secretBox{keyPath: keyPath, aead: aead, keyCreated: created}, nil
 }
 
 func newGCM(key []byte) (cipher.AEAD, error) {

@@ -108,6 +108,37 @@ connection check), honest work estimates (steps × reachable machines), then
 a run that reports per machine in outcome language — *Already correct*,
 *Updated*, *Failed* — with raw Ansible output in a collapsible log.
 
+### Where your data lives
+
+```text
+~/.config/visualible/          (macOS: ~/Library/Application Support/visualible)
+├── visualible.db              projects, credentials, deployments, settings
+├── secret.key                 0600 key that encrypts stored credentials
+└── cache/modules.json         cached ansible-doc metadata
+```
+
+Override the location with `-data-dir` / `VISUALIBLE_DATA_DIR`. The active
+database file is printed in the startup banner, logged at INFO, shown in
+the Settings dialog and available in the status popover — if state looks
+missing, check that path first: an unexpectedly fresh database means
+Visualible is pointed somewhere else, and startup says so explicitly
+(`WARN no existing database was found; a new one was created`).
+
+Durability details, so restarts are never a mystery:
+
+- SQLite runs in **WAL mode with `synchronous=FULL`**: committed
+  transactions survive process kills, OS crashes and power loss.
+- The WAL is **checkpointed (TRUNCATE) on open and on clean shutdown**, so
+  `visualible.db` is self-contained at every lifecycle boundary —
+  copying that one file after stopping Visualible keeps everything.
+- A missing `secret.key` is **never silent**: the key is regenerated (so
+  the app still starts) but an ERROR explains that previously stored
+  credentials can no longer be decrypted and must be re-entered.
+
+These properties are covered by regression tests in
+`internal/store/durability_test.go` (main-file-only backup, missing WAL
+sidecars, unclean exit, new-database reporting, key loss).
+
 ### Simple and Advanced, one IR
 
 There is no separate simplified model and no separate engine: curated

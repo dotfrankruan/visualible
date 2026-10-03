@@ -25,14 +25,36 @@ import (
 type Store struct {
 	db  *sql.DB
 	box *secretBox
+
+	// path is the resolved database file ("" for in-memory databases).
+	path string
+	// newDatabase records that this process created the database file, so
+	// startup can say so loudly: an unexpectedly fresh database almost
+	// always means the application is pointed at the wrong data
+	// directory — not that data was lost.
+	newDatabase bool
 }
+
+// Path returns the resolved database file path ("" for :memory:).
+func (s *Store) Path() string { return s.path }
+
+// NewDatabase reports whether this process created the database file.
+func (s *Store) NewDatabase() bool { return s.newDatabase }
 
 // Open opens (creating if necessary) the database at path and migrates
 // the schema. keyPath locates the secret-encryption key file; pass "" to
 // use an ephemeral in-memory key (tests). Use ":memory:" for tests.
+//
+// Durability: WAL journaling keeps committed transactions crash-safe, and
+// the database is checkpointed on open and close (TRUNCATE) so the main
+// .db file is self-contained at every lifecycle boundary. synchronous=FULL
+// makes committed transactions survive OS crashes and power loss, which
+// matters more than throughput for a control plane.
 func Open(path, keyPath string) (*Store, error) {
-	// foreign_keys on; busy_timeout so a crashed peer cannot wedge us.
-	dsn := fmt.Sprintf("%s?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)", path)
+	memory := path == ":memory:" || path == ""
+	dsn := fmt.Sprintf(
+		"%s?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(FULL)&_pragma=foreign_keys(1)",
+		path)
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
@@ -40,16 +62,80 @@ func Open(path, keyPath string) (*Store, error) {
 	// One connection keeps :memory: databases coherent and avoids
 	// SQLITE_BUSY under our low concurrency.
 	db.SetMaxOpenConns(1)
+
+	existed := true
+	if !memory {
+		existed = databaseExists(db)
+	}
 	if err := migrate(db); err != nil {
 		db.Close()
 		return nil, err
 	}
+	// Fold any surviving WAL into the main file as soon as we own the
+	// database: a database that looks empty because its committed pages
+	// live in a sidecar file is a support nightmare.
+	checkpoint(db)
+
 	box, err := openBox(keyPath)
 	if err != nil {
 		db.Close()
 		return nil, err
 	}
-	return &Store{db: db, box: box}, nil
+	st := &Store{db: db, box: box, path: path, newDatabase: !memory && !existed}
+	if box.keyCreated {
+		// A fresh key makes every stored secret undecryptable. That is
+		// never silent.
+		n := countRows(db, "credentials")
+		if n > 0 {
+			logging.Error("secret key file was missing and has been recreated",
+				"keyFile", keyPath,
+				"storedCredentials", n,
+				"impact", "existing credentials can no longer be decrypted; re-enter them on the Targets page")
+		} else {
+			logging.Info("generated a new secret key file", "keyFile", keyPath)
+		}
+	}
+	if st.newDatabase {
+		logging.Warn("no existing database was found; a new one was created",
+			"path", path,
+			"hint", "if you expected existing projects or credentials, check the -data-dir / VISUALIBLE_DATA_DIR setting")
+	} else {
+		logging.Info("database opened",
+			"path", path,
+			"projects", countRows(db, "projects"),
+			"credentials", countRows(db, "credentials"),
+			"deployments", countRows(db, "deployments"))
+	}
+	return st, nil
+}
+
+// databaseExists reports whether the database file already contains a
+// schema (i.e. this is not a fresh database).
+func databaseExists(db *sql.DB) bool {
+	var n int
+	if err := db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type = 'table'`).Scan(&n); err != nil {
+		return false
+	}
+	return n > 0
+}
+
+// checkpoint folds the write-ahead log into the main database file. It is
+// best-effort: a failure only means the WAL keeps its pages, which SQLite
+// still replays correctly on the next open.
+func checkpoint(db *sql.DB) {
+	if _, err := db.Exec(`PRAGMA wal_checkpoint(TRUNCATE)`); err != nil {
+		logging.Debug("wal checkpoint skipped", "err", err)
+	}
+}
+
+// countRows returns the row count of a table, or 0 when it cannot be read.
+func countRows(db *sql.DB, table string) int {
+	var n int
+	// Table names come from a fixed internal set, never from user input.
+	if err := db.QueryRow(`SELECT count(*) FROM ` + table).Scan(&n); err != nil {
+		return 0
+	}
+	return n
 }
 
 func openBox(keyPath string) (*secretBox, error) {
@@ -68,8 +154,13 @@ func openBox(keyPath string) (*secretBox, error) {
 	return openSecretBox(keyPath)
 }
 
-// Close closes the database.
-func (s *Store) Close() error { return s.db.Close() }
+// Close checkpoints the WAL and closes the database, so a clean shutdown
+// always leaves a self-contained .db file (backups that copy only the
+// main file then contain everything).
+func (s *Store) Close() error {
+	checkpoint(s.db)
+	return s.db.Close()
+}
 
 func migrate(db *sql.DB) error {
 	const schema = `

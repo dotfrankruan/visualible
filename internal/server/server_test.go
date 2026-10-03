@@ -69,6 +69,11 @@ func TestHealth(t *testing.T) {
 	if !h.Ansible.Available || h.Ansible.Version != "2.16.3" {
 		t.Fatalf("unexpected health: %+v", h)
 	}
+	// The active database location is reported so an unexpectedly fresh
+	// database can be diagnosed from the UI (in-memory test store here).
+	if h.DBPath == "" {
+		t.Fatalf("health must report the database path: %+v", h)
+	}
 }
 
 func TestModuleList(t *testing.T) {

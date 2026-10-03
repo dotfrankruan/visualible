@@ -154,6 +154,8 @@ function renderAnsiblePopover() {
     ['Version', a.version || '?'],
     ['Path', a.path || '?'],
     ['Modules', h.modules ? h.modules.toLocaleString() : 'not yet discovered'],
+    ['Database', h.dbPath || '?'],
+    ['Data dir', h.dataDir || '?'],
   ];
   for (const [k, v] of rows) {
     pop.append(el('div', { class: 'pop-row' },

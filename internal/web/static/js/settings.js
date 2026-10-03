@@ -22,6 +22,16 @@ async function openSettings() {
     api.settings().catch(() => ({})),
     api.credentials().then((r) => r.credentials).catch(() => []),
   ]);
+  // Make the active data location visible: an unexpectedly fresh database
+  // is the common cause of "my credentials disappeared".
+  try {
+    const health = await api.health();
+    $('#set-data-dir').value = health.dataDir ?? '(unknown)';
+    $('#set-db-path').value = health.dbPath ?? '(unknown)';
+  } catch {
+    $('#set-data-dir').value = '(unavailable)';
+    $('#set-db-path').value = '(unavailable)';
+  }
   $('#set-ansible-path').value = settings.ansiblePath ?? '';
   $('#set-ansible-doc-path').value = settings.ansibleDocPath ?? '';
   $('#set-ansible-playbook-path').value = settings.ansiblePlaybookPath ?? '';

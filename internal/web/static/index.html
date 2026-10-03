@@ -238,6 +238,15 @@
         <button id="settings-close" class="mini-btn">✕</button>
       </div>
       <form id="settings-form" class="modal-body">
+        <div class="props-heading">Where your data lives</div>
+        <label class="set-label">Data directory<input id="set-data-dir" type="text" readonly></label>
+        <label class="set-label">Database file<input id="set-db-path" type="text" readonly></label>
+        <div class="hint-line" style="margin:-4px 0 10px">
+          Projects and credentials are stored here. If this path is not where you expect,
+          Visualible is running with a different <code>-data-dir</code> than you think —
+          that is the usual reason state looks missing. Start it with
+          <code>-data-dir &lt;path&gt;</code> to pin the location.
+        </div>
         <div class="props-heading">Ansible</div>
         <label class="set-label">ansible path<input id="set-ansible-path" type="text" placeholder="(PATH lookup)"></label>
         <label class="set-label">ansible-doc path<input id="set-ansible-doc-path" type="text" placeholder="(PATH lookup)"></label>

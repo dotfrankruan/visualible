@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"github.com/dotfrankruan/visualible/internal/ansible"
@@ -117,12 +118,24 @@ type healthResponse struct {
 	Version string         `json:"version"`
 	Ansible ansible.Status `json:"ansible"`
 	Modules int            `json:"modules"`
+	// Paths make "which database am I actually using?" answerable from the
+	// UI — an unexpectedly fresh database is the usual explanation for
+	// state that appears to have vanished.
+	DataDir string `json:"dataDir,omitempty"`
+	DBPath  string `json:"dbPath,omitempty"`
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	resp := healthResponse{Version: Version, Ansible: s.discovery.Status()}
 	if list, ok := s.discovery.CachedModules(); ok {
 		resp.Modules = len(list)
+	}
+	if s.store != nil {
+		resp.DBPath = s.store.Path()
+		resp.DataDir = filepath.Dir(s.store.Path())
+		if resp.DBPath == ":memory:" || resp.DBPath == "" {
+			resp.DBPath, resp.DataDir = "(in-memory)", ""
+		}
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
