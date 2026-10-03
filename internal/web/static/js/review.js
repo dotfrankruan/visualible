@@ -4,6 +4,7 @@
 import { api } from './api.js';
 import * as store from './store.js';
 import { el } from './form.js';
+import { humanizeProblems } from './errors.js';
 import { renderYaml } from './yaml.js';
 import { goStage } from './app.js';
 
@@ -341,7 +342,7 @@ async function downloadYaml() {
     a.click();
     URL.revokeObjectURL(a.href);
   } catch (e) {
-    const msg = e.problems?.length ? e.problems.join('\n') : e.message;
-    alert(`Cannot export: ${msg}`);
+    const msg = e.problems?.length ? humanizeProblems(e.problems) : e.message;
+    alert(`Cannot export the YAML yet:\n\n${msg}`);
   }
 }

@@ -6,6 +6,7 @@
 import { api } from './api.js';
 import * as store from './store.js';
 import { el } from './form.js';
+import { humanizeProblems } from './errors.js';
 import { wireBuild, renderBuild } from './build.js';
 import { wireTargets, renderTargets } from './targets.js';
 import { wireReview, renderReview } from './review.js';
@@ -75,7 +76,23 @@ function wireChrome() {
   $('#btn-undo').addEventListener('click', store.undo);
   $('#btn-redo').addEventListener('click', store.redo);
 
+  // Escape closes whatever is open; Ctrl/Cmd+Enter submits AI intents.
   document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const open = [...document.querySelectorAll('.modal:not(.hidden)')].pop();
+      if (open) { open.classList.add('hidden'); e.preventDefault(); }
+      $('#ansible-popover').classList.add('hidden');
+      return;
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      if (e.target.id === 'ai-intent' || e.target.id === 'ai-bar-input' || e.target.id === 'empty-ai-intent') {
+        e.preventDefault();
+        if (e.target.id === 'ai-bar-input') $('#ai-bar-generate').click();
+        else if (e.target.id === 'empty-ai-intent') $('#empty-ai-generate').click();
+        else $('#ai-generate').click();
+      }
+      return;
+    }
     if (!(e.metaKey || e.ctrlKey)) return;
     if (e.target.matches('input, textarea, select')) return;
     if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); store.undo(); }
@@ -161,8 +178,10 @@ export async function saveProject() {
     const saved = await api.saveProject(p);
     store.markSaved(saved);
   } catch (e) {
-    const msg = e.problems?.length ? e.problems.join('\n') : e.message;
-    alert(`Save failed:\n${msg}`);
+    // Explain validation problems in plain language; the technical text
+    // stays available in the log/details.
+    const msg = e.problems?.length ? humanizeProblems(e.problems) : e.message;
+    alert(`Could not save:\n\n${msg}`);
     $('#btn-save').disabled = false;
   }
 }

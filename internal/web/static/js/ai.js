@@ -6,6 +6,7 @@
 import { api } from './api.js';
 import * as store from './store.js';
 import { el } from './form.js';
+import { humanizeProblems } from './errors.js';
 import { renderYaml } from './yaml.js';
 import { goStage, aiConfigured } from './app.js';
 
@@ -291,7 +292,8 @@ async function applySelected() {
     closeAI();
     goStage('build');
   } catch (e) {
-    alert(`Could not apply the selected changes:\n${e.message}`);
+    const msg = e.problems?.length ? humanizeProblems(e.problems) : e.message;
+    alert(`Could not apply the selected changes:\n\n${msg}`);
     btn.disabled = false;
   }
 }

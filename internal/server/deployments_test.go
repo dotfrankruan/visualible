@@ -22,10 +22,15 @@ type fakeRunner struct {
 	exitCode int
 	events   []string
 	lastArgs []string
+	// stdout is written to process stdout (simulates ansible output).
+	stdout string
 }
 
 func (f *fakeRunner) Run(ctx context.Context, opts deploy.RunOpts) (int, error) {
 	f.lastArgs = opts.Args
+	if f.stdout != "" && opts.Stdout != nil {
+		_, _ = opts.Stdout.Write([]byte(f.stdout))
+	}
 	if len(f.events) > 0 && !strings.Contains(strings.Join(opts.Args, " "), "--syntax-check") {
 		for _, env := range opts.Env {
 			if path, ok := strings.CutPrefix(env, "VISUALIBLE_EVENT_FILE="); ok {

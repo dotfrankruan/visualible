@@ -42,27 +42,91 @@ Run the test suite (no network or Ansible required):
 go test ./...
 ```
 
+## The workflow
+
+Visualible is organized around intent, not Ansible vocabulary:
+
+```text
+Build  →  Targets  →  Review  →  Deploy
+what      which       human      run it
+happens   machines    inspection
+```
+
+**Build.** Start from a curated Action ("Install software", "Manage a
+service", "Create a user", "Deploy a file", …) or describe the change in
+plain language to the AI. One intent may become several Ansible tasks —
+you never have to know that. Or open *Browse all 8,862 Ansible modules* and
+build at the module level.
+
+**Targets.** Machines with friendly fields (name, address, SSH user,
+credential, port), groups, and a **Test connection** button that explains
+failures in plain language ("The SSH login was refused…", "The machine's
+SSH host key is not trusted yet…") with the raw Ansible output one hover
+away. The exact Ansible inventory is available under *View Ansible
+inventory*.
+
+**Review.** A human summary: which machines, which steps in outcome
+language, expected scope, warnings (raw commands, unreachable machines,
+steps that stay technical), and *View advanced details* for module names
+and arguments. YAML lives here, behind *View Ansible YAML* — an escape
+hatch and learning tool, never a requirement.
+
+**Deploy.** Preflight (targets, automation, Ansible readiness, per-machine
+connection check), honest work estimates (steps × reachable machines), then
+a run that reports per machine in outcome language — *Already correct*,
+*Updated*, *Failed* — with raw Ansible output in a collapsible log.
+
+### Simple and Advanced, one IR
+
+There is no separate simplified model and no separate engine: curated
+Actions generate ordinary IR tasks, and recognition maps tasks back to
+Actions **only when the mapping is faithful**. A task with `when`, `loop`,
+`register`, `tags`, unusual module arguments or a second `notify` target is
+shown as an *Advanced Ansible task* instead, so nothing is ever hidden.
+"Show Ansible details" on any Action reveals the module, its arguments and
+the task options — the gradual learning path to Ansible itself.
+
+### AI as an editing workflow
+
+Describe a change; Visualible proposes one.
+
+```text
+intent → AI → complete proposed IR → validation → Visualible semantic diff
+      → review (accept/reject per change) → merge → validate → apply (one undo)
+```
+
+- The model returns **structured IR**, never deployable YAML; Visualible
+  owns the prompt, validates everything, and computes the diff itself
+  (Added / Removed / Modified / Moved / Unchanged, with field-level
+  comparison and moves recognized rather than reported as delete + add).
+- Removals require explicit acceptance; "Accept all" says so when removals
+  are included.
+- Proposals are tied to the project revision they were generated from: if
+  you edit while the model works, the proposal is marked stale instead of
+  being applied to changed state.
+- Applying is a single undoable operation; deployment always remains a
+  separate, explicit action.
+- AI is optional — everything above works without a provider configured.
+
 ## What you can do today
 
-1. Start Visualible; it detects your local Ansible.
-2. Browse/search all installed Ansible modules (live from `ansible-doc`,
-   normalized and cached — including every installed collection).
-3. Add modules as tasks; edit arguments in **forms generated dynamically from
-   `ansible-doc` metadata** (types, choices, defaults, required fields,
-   recursive suboptions).
-4. Sequence tasks and handlers on the canvas (drag-and-drop or arrows),
-   wire `notify` → handler relationships.
-5. View canonical rendered YAML; edit YAML directly and apply it back into
-   the editor with structured diagnostics (explicit sync, no fragile
-   reparse-on-keystroke).
-6. Build an inventory (groups, hosts, connection vars) and store SSH
+1. Start Visualible; it detects your local Ansible ("Ansible ready"; version
+   and module count on click).
+2. Build automation with curated Actions, or browse/search all installed
+   Ansible modules (live from `ansible-doc`, normalized and cached) and edit
+   arguments in **forms generated dynamically from `ansible-doc` metadata**
+   (types, choices, defaults, required fields, recursive suboptions).
+3. Sequence steps on the canvas (drag-and-drop or arrows) with
+   "when this changes → restart…" relationships shown in plain language.
+4. Ask the AI for a change, review the proposed diff change by change, and
+   apply what you want.
+5. Review a human summary and, when you want it, the generated YAML — which
+   you can also edit and apply back with structured diagnostics.
+6. Manage target machines and groups, test connections, and store SSH
    credentials in an encrypted credential store (referenced, never inlined).
 7. Deploy via `ansible-playbook` (`--check`, `--diff`, tags, limit,
-   verbosity) with a **structured live event stream** (play/task/host
-   statuses, not just raw terminal output) and cancellation.
-8. Optionally configure an OpenAI-compatible AI endpoint (e.g. Ollama) and
-   generate playbook proposals from natural language — proposals become
-   reviewable IR; nothing is applied or deployed without your approval.
+   verbosity) with a **structured live event stream** (per-machine progress,
+   not just raw terminal output) and cancellation.
 
 ## Architecture
 
@@ -95,12 +159,16 @@ Go packages:
 | `internal/deploy` | `Backend` interface + capabilities, event normalization, deployment manager. |
 | `internal/deploy` (Ansible SSH) | The one real v0.1 backend: workspace render, credential materialization, preflight, process-group exec, event tailing. |
 | `internal/store` | SQLite (pure Go): projects as IR documents, encrypted credentials, deployments, settings. |
-| `internal/ai` | Provider abstraction + OpenAI-compatible adapter; intent → IR proposals. |
+| `internal/action` | Curated beginner Actions: Action → IR generation (incl. compound) and strict IR → Action recognition. Presentation layer only. |
+| `internal/ai` | Provider abstraction + OpenAI-compatible adapter; intent → validated IR proposals with rationale. |
+| `internal/aidiff` | IR-aware semantic diff (Added/Removed/Modified/Moved, field-level) and selective merge with validation. |
 | `internal/server` | REST API + SSE, embedded static frontend. |
 
-Frontend (`internal/web/static`): three explicit state slices (server /
-editor / ui) with event subscriptions; all editor mutations flow through one
-`commit()` function, giving snapshot-based undo/redo.
+Frontend (`internal/web/static`): plain ES modules, no build step. Four
+stage modules (build/targets/review/deploy) plus AI, Actions and settings,
+over three explicit state slices (server / editor / ui); every editor
+mutation flows through one `commit()` function, giving snapshot-based
+undo/redo — including whole AI proposals as single operations.
 
 ### Key invariants
 
@@ -120,6 +188,27 @@ editor / ui) with event subscriptions; all editor mutations flow through one
   `Validate/Prepare/Execute/Cancel/Cleanup` plus a capability set the UI can
   adapt to. Pull/bootstrap or agent-based backends can be added without
   touching the application core.
+
+### API surface (selection)
+
+```text
+GET    /api/health                      Ansible availability
+GET    /api/actions                     curated Actions (+ availability)
+POST   /api/actions/generate            Action → validated IR tasks
+POST   /api/actions/recognize           IR tasks → curated labels or Advanced
+GET    /api/modules[?refresh=1]         full module catalog from ansible-doc
+GET    /api/modules/{fqcn}              normalized schema → dynamic form
+POST   /api/render | /api/parse         IR → YAML | YAML → IR + diagnostics
+POST   /api/render/inventory            IR inventory → Ansible inventory YAML
+GET/POST/PUT/DELETE /api/projects/...   project persistence (IR documents)
+GET/POST/DELETE /api/credentials        write-only, encrypted credentials
+POST   /api/targets/test                connection test for one machine
+POST   /api/deployments/preflight       per-machine readiness check
+POST   /api/ai/proposals                intent → validated IR + semantic diff
+POST   /api/ai/merge                    selective acceptance → validated IR
+POST   /api/deployments[/{id}/...]      deploy, inspect, SSE events, cancel
+GET/PUT /api/settings                   configuration (credential references)
+```
 
 ### Execution events
 

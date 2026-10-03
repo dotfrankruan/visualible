@@ -5,6 +5,7 @@
 import { api } from './api.js';
 import * as store from './store.js';
 import { el } from './form.js';
+import { humanizeProblems } from './errors.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -163,8 +164,8 @@ async function startDeployment(e) {
     await loadDeployments();
     selectDeployment(d.id);
   } catch (err) {
-    const msg = err.problems?.length ? err.problems.join('\n') : err.message;
-    alert(`Deployment could not start:\n${msg}`);
+    const msg = err.problems?.length ? humanizeProblems(err.problems) : err.message;
+    alert(`Deployment could not start:\n\n${msg}`);
   } finally {
     renderRunFormState();
   }
