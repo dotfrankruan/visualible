@@ -39,6 +39,8 @@ type AISettings struct {
 	Model        string            `json:"model,omitempty"`
 	APIKeyCredID string            `json:"apiKeyCredId,omitempty"` // credential reference
 	Headers      map[string]string `json:"headers,omitempty"`
+	// Temperature is optional; nil means "let the provider decide".
+	Temperature *float64 `json:"temperature,omitempty"`
 }
 
 // S3Settings configures S3-compatible artifact storage. The backend is

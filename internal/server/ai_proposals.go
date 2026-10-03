@@ -41,6 +41,7 @@ type Proposal struct {
 	Request      string         `json:"request"`
 	Model        string         `json:"model,omitempty"`
 	ProposedIR   *ir.Playbook   `json:"proposedIr,omitempty"`
+	Rationale    []string       `json:"rationale,omitempty"`
 	Diff         *aidiff.Diff   `json:"diff,omitempty"`
 	Diagnostics  []string       `json:"diagnostics,omitempty"`
 	CreatedAt    time.Time      `json:"createdAt"`
@@ -59,9 +60,10 @@ func (s *Server) aiProvider(r *http.Request) (*ai.OpenAIProvider, string, error)
 		return nil, "", err
 	}
 	cfg := ai.Config{
-		Endpoint: settings.AI.Endpoint,
-		Model:    settings.AI.Model,
-		Headers:  settings.AI.Headers,
+		Endpoint:    settings.AI.Endpoint,
+		Model:       settings.AI.Model,
+		Headers:     settings.AI.Headers,
+		Temperature: settings.AI.Temperature,
 	}
 	if settings.AI.APIKeyCredID != "" {
 		// Resolved server-side only; never logged, never returned.
@@ -120,10 +122,11 @@ func (s *Server) handleAIProposalCreate(w http.ResponseWriter, r *http.Request) 
 		writeJSON(w, http.StatusOK, proposal)
 		return
 	}
-	proposal.ProposedIR = proposed
+	proposal.ProposedIR = proposed.Playbook
+	proposal.Rationale = proposed.Rationale
 
 	// Validate before displaying as applicable.
-	if verr := proposed.Validate(); verr != nil {
+	if verr := proposed.Playbook.Validate(); verr != nil {
 		proposal.Status = ProposalFailed
 		if ve, ok := verr.(*ir.ValidationError); ok {
 			proposal.Diagnostics = ve.Problems
@@ -135,7 +138,7 @@ func (s *Server) handleAIProposalCreate(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Visualible computes the diff; the model is not consulted about it.
-	proposal.Diff = aidiff.Playbooks(base, proposed)
+	proposal.Diff = aidiff.Playbooks(base, proposed.Playbook)
 	proposal.Status = ProposalReady
 	writeJSON(w, http.StatusOK, proposal)
 }

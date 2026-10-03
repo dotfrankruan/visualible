@@ -24,10 +24,11 @@ const validIRJSON = `{"name":"demo","plays":[{"id":"play1","name":"web","hosts":
 
 func TestProposeIR(t *testing.T) {
 	p := &captureProvider{response: validIRJSON}
-	pb, err := ProposeIR(context.Background(), p, "install nginx", nil)
+	prop, err := ProposeIR(context.Background(), p, "install nginx", nil)
 	if err != nil {
 		t.Fatalf("propose: %v", err)
 	}
+	pb := prop.Playbook
 	if len(pb.Plays) != 1 || len(pb.Plays[0].Tasks) != 2 {
 		t.Fatalf("plays wrong: %+v", pb)
 	}
@@ -64,12 +65,12 @@ func TestProposeIRIncludesCurrentContext(t *testing.T) {
 
 func TestProposeIRToleratesFences(t *testing.T) {
 	p := &captureProvider{response: "Here is the result:\n```json\n" + validIRJSON + "\n```\nDone."}
-	pb, err := ProposeIR(context.Background(), p, "x", nil)
+	prop, err := ProposeIR(context.Background(), p, "x", nil)
 	if err != nil {
 		t.Fatalf("propose: %v", err)
 	}
-	if len(pb.Plays) != 1 {
-		t.Fatalf("plays = %d", len(pb.Plays))
+	if len(prop.Playbook.Plays) != 1 {
+		t.Fatalf("plays = %d", len(prop.Playbook.Plays))
 	}
 }
 
@@ -106,6 +107,33 @@ func TestParseIRRejectsGarbage(t *testing.T) {
 		if _, err := ParseIR(raw); err == nil {
 			t.Errorf("expected error for %q", raw)
 		}
+	}
+}
+
+func TestProposeIREnvelopeWithRationale(t *testing.T) {
+	raw := `{"playbook":` + validIRJSON + `,"rationale":["Kept nginx installed.","Added service start.","  ",""]}`
+	prop, err := ParseProposal(raw)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(prop.Playbook.Plays) != 1 {
+		t.Fatalf("playbook missing from envelope: %+v", prop.Playbook)
+	}
+	if len(prop.Rationale) != 2 {
+		t.Fatalf("rationale = %v (blanks must be dropped)", prop.Rationale)
+	}
+	if prop.Rationale[0] != "Kept nginx installed." {
+		t.Fatalf("rationale = %v", prop.Rationale)
+	}
+}
+
+func TestParseProposalBarePlaybookHasNoRationale(t *testing.T) {
+	prop, err := ParseProposal(validIRJSON)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if prop.Rationale != nil {
+		t.Fatalf("unexpected rationale: %v", prop.Rationale)
 	}
 }
 

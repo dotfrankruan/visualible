@@ -130,6 +130,27 @@ function renderProposal() {
       ? el('span', { class: 'sum' }, 'No changes — the AI thinks it is already done.')
       : null));
 
+  // Rationale (optional explanatory text from the model; never affects
+  // execution semantics).
+  if (proposal.rationale?.length) {
+    const rEl = el('div', { class: 'action-explain' });
+    for (const line of proposal.rationale) rEl.append(el('div', {}, '• ' + line));
+    res.append(rEl);
+  }
+
+  // Bulk actions.
+  const actionable = (d.changes ?? []).filter((c) => c.kind !== 'unchanged').map((c) => c.id);
+  const anyRemovals = (d.changes ?? []).some((c) => c.kind === 'removed');
+  res.append(el('div', { class: 'modal-actions', style: 'margin-bottom:8px' },
+    el('button', {
+      class: 'mini-btn',
+      onclick: () => { for (const id of actionable) accepted.set(id, true); rerender(); },
+    }, anyRemovals ? 'Accept all (includes removals)' : 'Accept all'),
+    el('button', {
+      class: 'mini-btn',
+      onclick: () => { accepted = new Map(); rerender(); },
+    }, 'Reject all')));
+
   // Play-level change card.
   if (d.playChanges?.length) {
     res.append(changeCard({
@@ -227,6 +248,11 @@ function changeCard(c) {
 function setAccepted(id, value) {
   accepted.set(id, value);
   updateApplyButton();
+}
+
+// rerender refreshes the review view in place (used by bulk actions).
+function rerender() {
+  renderProposal();
 }
 
 function refreshCard(e, id) {

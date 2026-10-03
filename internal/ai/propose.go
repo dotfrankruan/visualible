@@ -18,8 +18,11 @@ const proposeSystemPrompt = `You are the automation editing engine inside Visual
 You receive the user's desired change and, when a project exists, the current automation as Visualible IR (JSON). You respond with the COMPLETE resulting automation as Visualible IR.
 
 OUTPUT CONTRACT — strict:
-- Output ONLY one JSON object. No markdown fences, no prose, no explanations, no YAML.
-- Shape:
+- Output ONLY one JSON object. No markdown fences, no prose outside the JSON, no YAML.
+- You MAY wrap the playbook in an envelope with short explanations:
+  {"playbook": {Playbook}, "rationale": ["why this change", ...]}
+  "rationale" is optional explanatory text only; it never affects execution.
+- Shape of the playbook itself:
   {"name": string,
    "plays": [{
      "id": string, "name": string, "hosts": string,
@@ -47,7 +50,7 @@ EDITING RULES:
 // the given intent, grounded by the current IR (if any). The model
 // returns desired state only; Visualible validates, diffs and merges —
 // the model is never authoritative about what changed.
-func ProposeIR(ctx context.Context, p Provider, intent string, current *ir.Playbook) (*ir.Playbook, error) {
+func ProposeIR(ctx context.Context, p Provider, intent string, current *ir.Playbook) (*Proposed, error) {
 	if strings.TrimSpace(intent) == "" {
 		return nil, fmt.Errorf("intent must not be empty")
 	}
@@ -72,21 +75,40 @@ func ProposeIR(ctx context.Context, p Provider, intent string, current *ir.Playb
 	if err != nil {
 		return nil, err
 	}
-	proposed, err := ParseIR(raw)
-	if err != nil {
-		return nil, err
-	}
-	return proposed, nil
+	return ParseProposal(raw)
 }
 
-// ParseIR parses and normalizes a model response into a playbook. It is
-// deliberately strict about structure but tolerant of fence/prose noise
-// around the JSON object. Missing IDs are assigned; names are defaulted.
-func ParseIR(raw string) (*ir.Playbook, error) {
+// Proposed is a model response: the complete desired IR plus optional
+// explanatory text. Rationale is presentation only — the IR is the only
+// thing that affects execution.
+type Proposed struct {
+	Playbook  *ir.Playbook
+	Rationale []string
+}
+
+// ParseProposal parses a model response into a proposal. Both a bare
+// playbook object and an envelope ({"playbook": {...}, "rationale": [...]})
+// are accepted. Structure is validated strictly; fence/prose noise around
+// the JSON object is tolerated. Missing IDs are assigned, names defaulted.
+func ParseProposal(raw string) (*Proposed, error) {
 	text := extractJSON(raw)
 	if text == "" {
 		return nil, fmt.Errorf("AI output contained no JSON object")
 	}
+	// Envelope form first.
+	var envelope struct {
+		Playbook  *ir.Playbook `json:"playbook"`
+		Rationale []string     `json:"rationale"`
+	}
+	if err := json.Unmarshal([]byte(text), &envelope); err == nil && envelope.Playbook != nil {
+		pb := envelope.Playbook
+		if len(pb.Plays) == 0 {
+			return nil, fmt.Errorf("AI output contained no plays")
+		}
+		normalizeIDs(pb)
+		return &Proposed{Playbook: pb, Rationale: cleanRationale(envelope.Rationale)}, nil
+	}
+	// Bare playbook form.
 	var pb ir.Playbook
 	if err := json.Unmarshal([]byte(text), &pb); err != nil {
 		return nil, fmt.Errorf("AI output was not valid Visualible IR: %w", err)
@@ -95,7 +117,36 @@ func ParseIR(raw string) (*ir.Playbook, error) {
 		return nil, fmt.Errorf("AI output contained no plays")
 	}
 	normalizeIDs(&pb)
-	return &pb, nil
+	return &Proposed{Playbook: &pb}, nil
+}
+
+// ParseIR keeps the playbook-only entry point for callers that do not
+// care about rationale (and for tests).
+func ParseIR(raw string) (*ir.Playbook, error) {
+	p, err := ParseProposal(raw)
+	if err != nil {
+		return nil, err
+	}
+	return p.Playbook, nil
+}
+
+// cleanRationale trims, drops blanks and caps the number of lines shown.
+func cleanRationale(in []string) []string {
+	var out []string
+	for _, s := range in {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		if len(s) > 300 {
+			s = s[:297] + "…"
+		}
+		out = append(out, s)
+		if len(out) == 6 {
+			break
+		}
+	}
+	return out
 }
 
 // extractJSON finds the first balanced {...} region, tolerating markdown

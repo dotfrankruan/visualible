@@ -285,6 +285,28 @@ button.primary.big { padding: 9px 22px; font-size: 13px; font-weight: 600; }
 
 .empty-import { text-align: center; margin-top: 16px; }
 
+/* ---------- Persistent AI bar ---------- */
+
+#ai-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+#ai-bar .ai-bar-label { color: var(--text-dim); font-size: 12px; white-space: nowrap; }
+#ai-bar input {
+  flex: 1;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12.5px;
+}
+#ai-bar input:focus { outline: none; border-color: var(--accent); }
+
 /* ---------- Canvas ---------- */
 
 #canvas-wrap { display: flex; flex-direction: column; min-height: 0; flex: 1; }

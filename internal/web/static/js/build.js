@@ -14,6 +14,24 @@ export function wireBuild() {
   wirePlayFields();
   wirePaletteToggle();
   wireEmptyState();
+  wireAIBar();
+}
+
+// The AI input is persistent: it works whether or not the project
+// already contains automation (existing projects get a change request,
+// not a from-scratch generation).
+function wireAIBar() {
+  const input = $('#ai-bar-input');
+  const submit = () => {
+    const intent = input.value.trim();
+    if (!intent) return;
+    openAIWithIntent(intent);
+    input.value = '';
+  };
+  $('#ai-bar-generate').addEventListener('click', submit);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); submit(); }
+  });
 }
 
 export async function renderBuild() {

@@ -32,6 +32,8 @@ type Config struct {
 	Model    string            // model name
 	APIKey   string            // bearer token; may be empty for local servers
 	Headers  map[string]string // optional extra headers
+	// Temperature is optional; nil leaves the provider default in place.
+	Temperature *float64
 }
 
 // Validate checks the config is usable.
@@ -89,10 +91,14 @@ func (p *OpenAIProvider) Complete(ctx context.Context, messages []Message) (stri
 	if err := p.cfg.Validate(); err != nil {
 		return "", err
 	}
-	body, err := json.Marshal(chatRequest{
+	reqBody := chatRequest{
 		Model:    p.cfg.Model,
 		Messages: messages,
-	})
+	}
+	if p.cfg.Temperature != nil {
+		reqBody.Temperature = *p.cfg.Temperature
+	}
+	body, err := json.Marshal(reqBody)
 	if err != nil {
 		return "", err
 	}
