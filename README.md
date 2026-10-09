@@ -350,4 +350,6 @@ the renderer refuses it rather than silently reinterpreting it.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+AGPL-3.0-or-later — see [LICENSE](LICENSE). Visualible is free software;
+if you run a modified version as a network service, its source must be
+offered to users of that service.
